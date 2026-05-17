@@ -1,6 +1,14 @@
-audio/
-video/
-output/
+# media
+audio/*.mp3
+audio/*.wav
+audio/*.aac
+audio/*.m4a
+video/*.mp4
+video/*.mov
+video/*.webm
+output/*.mp4
+
+# env
 .venv/
 .env
 .DS_Store
