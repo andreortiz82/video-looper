@@ -168,22 +168,24 @@ if not video_files:
 
 print(f"Found {len(audio_files)} audio file(s), {len(video_files)} video loop(s).\n")
 
-print("Destination:")
+print("Destination (comma-separated, e.g. 1,2):")
 print("  1. YouTube (16:9)")
 print("  2. Instagram (9:16, 60s)")
 while True:
-    try:
-        dest_choice = int(input("Enter number: "))
-        if dest_choice in (1, 2):
-            break
-    except ValueError:
-        pass
+    raw = input("Select: ").strip()
+    destinations = set()
+    for v in raw.split(","):
+        try:
+            c = int(v.strip())
+            if c in (1, 2):
+                destinations.add(c)
+        except ValueError:
+            pass
+    if destinations:
+        break
 
-youtube = dest_choice == 1
-canvas_size = YOUTUBE_CANVAS if youtube else INSTAGRAM_CANVAS
-label = "YT" if youtube else "INSTA"
-
-print(f"\nProcessing {len(audio_files)} file(s) → {label}...")
+dest_labels = " + ".join("YT" if d == 1 else "INSTA" for d in sorted(destinations))
+print(f"\nProcessing {len(audio_files)} file(s) × {len(destinations)} destination(s) → {dest_labels}...")
 results = []
 
 for audio_file in audio_files:
@@ -192,8 +194,12 @@ for audio_file in audio_files:
     video_file = random.choice(video_files)
     video_path = os.path.join(VIDEO_DIR, video_file)
     print(f"\nVideo loop: {video_file}")
-    output = render(song_path, song_name, video_path, youtube, canvas_size, label)
-    results.append(output)
+    for dest in sorted(destinations):
+        youtube = dest == 1
+        canvas_size = YOUTUBE_CANVAS if youtube else INSTAGRAM_CANVAS
+        label = "YT" if youtube else "INSTA"
+        output = render(song_path, song_name, video_path, youtube, canvas_size, label)
+        results.append(output)
 
 print(f"\n{'='*60}")
 print(f"Batch complete — {len(results)} file(s) rendered:")
