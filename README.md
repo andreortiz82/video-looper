@@ -1,55 +1,62 @@
 # video-looper
 
-Loops a short 1:1 video clip over a song and exports a finished MP4 for YouTube or Instagram — with a reactive audio visualizer and a canvas color sampled from the video.
+Loops a short 1:1 video clip over a song and exports a finished MP4 for YouTube or Instagram — with a reactive radial background, pulsing border, and RasaNova logo.
 
 ## Setup
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install moviepy Pillow
+.venv/bin/pip install -r requirements.txt
+brew install cairo   # required by cairosvg
 ```
 
 ## Usage
+
+**Single file (interactive):**
 
 ```bash
 .venv/bin/python3 loop_video.py
 ```
 
-The script walks you through four prompts:
+**Batch (all files in `audio/`):**
 
-1. **Audio file** — lists everything in `audio/`
-2. **Destination** — YouTube or Instagram
-3. **Visualizers** — comma-separated selection (e.g. `1,3`)
+```bash
+.venv/bin/python3 video_bus.py --dest insta
+```
 
 ## Project structure
 
 ```
 video-looper/
-├── audio/        # Drop .mp3 / .wav / .aac / .m4a files here
-├── video/        # Drop 1:1 video loops here (.mp4 / .mov / .webm)
-├── output/       # Rendered files land here
-└── loop_video.py
+├── assets/           # RasaNova logo (SVG)
+├── audio/
+├── video/
+├── output/
+├── visualizers.py    # Radial background, pulsing border
+├── layout.py         # Video scale, fixed logo placement
+├── render.py         # Unified render pipeline
+├── loop_video.py
+└── video_bus.py
 ```
 
 ## What it does
 
-1. Prompts for an audio file, destination, and visualizer selection
-2. Picks a random video loop from `video/`
-3. Samples a random pixel from the video to use as the canvas background color
-4. **YouTube** — loops the video over the full song at 1920×1080 (16:9)
-5. **Instagram** — selects a random 60-second window from the audio and loops the video at 1080×1920 (9:16)
-6. Renders the selected visualizer(s) below the video, reacting to the audio in real time
-7. Exports via H.264 / AAC to `output/` with a timestamp and platform label in the filename
+1. Picks a random video loop and samples two random colors from it (background + radial spokes)
+2. Renders a **radial** audio-reactive background centered behind the video
+3. Scales the loop on canvas (72% width Instagram, 58% height YouTube)
+4. Always shows **pulsing white border** around the video
+5. Always places **RasaNova logo** top-left
+6. **Instagram** — random 60s window at 1080×1920
+7. **YouTube** — full song at 1920×1080
 
-## Visualizers
+## Visual layers
 
-| # | Name | Description |
-|---|------|-------------|
-| 1 | Waveform | White oscillating line — 80ms audio window, normalized to local peak |
-| 2 | Frequency bars | 48 log-spaced FFT bars from 40Hz–10kHz, normalized per frame |
-| 3 | Pulsing border | Rectangle around the video that grows with RMS amplitude |
-
-Select any combination at the prompt, e.g. `2,3` or `1,2,3` for all three. Defaults to waveform if left blank.
+| Layer | Description |
+|-------|-------------|
+| Radial background | Solid fill + 72 FFT-driven spokes; colors sampled from the video loop |
+| Pulsing border | White outline around the video; thickness follows RMS |
+| Video loop | Scaled 1:1 clip, centered |
+| Logo | RasaNova mark, fixed top-left |
 
 ## Output naming
 
