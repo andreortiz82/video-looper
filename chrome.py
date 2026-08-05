@@ -48,9 +48,10 @@ def format_song_date(song_path: str | None = None, override: str | None = None) 
     if override:
         return override
     if song_path and os.path.isfile(song_path):
-        ts = os.path.getmtime(song_path)
-        return datetime.fromtimestamp(ts).strftime("%b %-d, %Y")
-    return datetime.now().strftime("%b %-d, %Y")
+        dt = datetime.fromtimestamp(os.path.getmtime(song_path))
+    else:
+        dt = datetime.now()
+    return f"{dt:%b} {dt.day}, {dt.year}"
 
 
 def display_title(song_name: str) -> str:
