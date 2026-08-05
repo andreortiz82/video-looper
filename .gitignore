@@ -1,12 +1,13 @@
-# media
+# media (do not commit)
 audio/*.mp3
 audio/*.wav
 audio/*.aac
 audio/*.m4a
-video/*.mp4
-video/*.mov
-video/*.webm
+audio/*.flac
 output/*.mp4
+output/*.mov
+stills/*.png
+video/
 
 # env
 .venv/

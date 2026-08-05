@@ -1,14 +1,18 @@
 import colorsys
+import math
 import random
 
 import numpy as np
-from moviepy import VideoClip
-from PIL import Image, ImageDraw
+from moviepy import ColorClip, VideoClip, concatenate_videoclips
+from moviepy.video.fx.CrossFadeIn import CrossFadeIn
+from PIL import Image, ImageEnhance, ImageDraw
 
 SAMPLE_RATE = 22050
-N_SPOKES = 72
 BORDER_MIN = 3
 BORDER_MAX = 18
+DISSOLVE_DURATION = 0.75
+# Visible hold between transition starts; cycles stills 1→2→3→1…
+SEGMENT_HOLD = 4.0
 
 
 def _saturated_pixels(frame: np.ndarray) -> list[tuple[int, int, int]]:
@@ -19,88 +23,82 @@ def _saturated_pixels(frame: np.ndarray) -> list[tuple[int, int, int]]:
         h, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
         if s >= 0.18 and v >= 0.2:
             colors.append((int(r), int(g), int(b)))
-    return colors or [(200, 80, 40)]
+    return colors or [(224, 68, 71)]
 
 
-def _color_distance(a: tuple[int, int, int], b: tuple[int, int, int]) -> float:
-    return sum((x - y) ** 2 for x, y in zip(a, b)) ** 0.5
+def sample_canvas_color(frames: list[np.ndarray], rng: random.Random | None = None) -> tuple[int, int, int]:
+    """Pick a saturated color from stills. Tan is never used (eye sclera only)."""
+    from art.palette import RED, is_tan
+
+    rng = rng or random.Random()
+    pool: list[tuple[int, int, int]] = []
+    for frame in frames:
+        pool.extend(c for c in _saturated_pixels(frame) if not is_tan(c))
+    return rng.choice(pool) if pool else RED
 
 
-def sample_random_colors(frame: np.ndarray) -> tuple[tuple[int, int, int], tuple[int, int, int]]:
-    pool = _saturated_pixels(frame)
-    bg_color = random.choice(pool)
-    radial_pool = [c for c in pool if _color_distance(c, bg_color) > 60] or pool
-    radial_color = random.choice(radial_pool)
-    if _color_distance(bg_color, radial_color) < 50:
-        radial_color = (255, 255, 255)
-    return bg_color, radial_color
+def make_solid_background_clip(duration: float, canvas_size: tuple[int, int], color: tuple[int, int, int]):
+    return ColorClip(size=canvas_size, color=color, duration=duration)
 
 
-def _fft_spoke_vals(chunk, n_spokes=N_SPOKES):
+def _energy_at(t: float, mono: np.ndarray, global_max_rms: float) -> float:
+    center = int(t * SAMPLE_RATE)
     window = int(SAMPLE_RATE * 0.04)
-    hann = np.hanning(window)
-    padded = np.zeros(window)
-    padded[:len(chunk)] = chunk
-    fft = np.abs(np.fft.rfft(padded * hann))
-    if len(fft) < n_spokes:
-        return np.zeros(n_spokes)
-    edges = np.linspace(0, len(fft) - 1, n_spokes + 1, dtype=int)
-    vals = np.array([np.mean(fft[edges[i]:edges[i + 1] + 1]) for i in range(n_spokes)])
-    return vals / (np.max(vals) + 1e-6)
+    start = max(0, center - window // 2)
+    chunk = mono[start:min(len(mono), start + window)]
+    if len(chunk) == 0:
+        return 0.0
+    rms = float(np.sqrt(np.mean(chunk ** 2)))
+    return float(np.clip(rms / global_max_rms, 0, 1))
 
 
-def make_radial_background_clip(
-    mono,
-    global_max_rms,
-    duration,
-    canvas_size,
-    bg_color,
-    radial_color,
-    center_x,
-    center_y,
-    inner_radius,
-    outer_radius,
+def make_camera_still_clip(
+    image: Image.Image,
+    mono: np.ndarray,
+    global_max_rms: float,
+    duration: float,
+    panel_size: int,
+    *,
+    drift_seed: int = 0,
 ):
-    angles = np.linspace(0, 2 * np.pi, N_SPOKES, endpoint=False)
-    cos_a = np.cos(angles)
-    sin_a = np.sin(angles)
+    """Ken-burns camera on a still; RMS gently pulses zoom and brightness."""
+    src = image.convert("RGB")
+    src_w, src_h = src.size
+    rng = random.Random(drift_seed)
+    # Start with enough headroom for zoom out/in
+    base_scale = max(panel_size / src_w, panel_size / src_h) * 1.12
+    pan_x = rng.uniform(-0.08, 0.08)
+    pan_y = rng.uniform(-0.08, 0.08)
+    zoom_dir = 1 if rng.random() < 0.5 else -1
 
     def make_frame(t):
-        img = Image.new("RGB", canvas_size, bg_color)
-        draw = ImageDraw.Draw(img)
+        energy = _energy_at(t, mono, global_max_rms)
+        progress = t / duration if duration > 0 else 0
+        zoom = base_scale * (1.0 + zoom_dir * 0.06 * progress + energy * 0.04)
+        crop_w = panel_size / zoom
+        crop_h = panel_size / zoom
+        max_ox = max(0.0, src_w - crop_w)
+        max_oy = max(0.0, src_h - crop_h)
+        ox = max_ox * (0.5 + pan_x * progress)
+        oy = max_oy * (0.5 + pan_y * progress)
+        ox = float(np.clip(ox, 0, max_ox))
+        oy = float(np.clip(oy, 0, max_oy))
 
-        center = int(t * SAMPLE_RATE)
-        window = int(SAMPLE_RATE * 0.04)
-        start = max(0, center - window // 2)
-        chunk = mono[start:min(len(mono), start + window)]
+        cropped = src.crop((int(ox), int(oy), int(ox + crop_w), int(oy + crop_h)))
+        framed = cropped.resize((panel_size, panel_size), Image.Resampling.LANCZOS)
 
-        if len(chunk) > 1:
-            vals = _fft_spoke_vals(chunk)
-            rms = np.sqrt(np.mean(chunk ** 2))
-            energy = np.clip(rms / global_max_rms, 0, 1)
-            stroke = max(4, int(5 + energy * 4))
-
-            for i, val in enumerate(vals):
-                length = inner_radius + val * (outer_radius - inner_radius) * (0.55 + energy * 0.45)
-                x0 = center_x + int(cos_a[i] * inner_radius)
-                y0 = center_y + int(sin_a[i] * inner_radius)
-                x1 = center_x + int(cos_a[i] * length)
-                y1 = center_y + int(sin_a[i] * length)
-                draw.line([(x0, y0), (x1, y1)], fill=radial_color, width=stroke)
-
-        return np.array(img)
+        brightness = 1.0 + energy * 0.08
+        saturation = 1.0 + energy * 0.1
+        framed = ImageEnhance.Brightness(framed).enhance(brightness)
+        framed = ImageEnhance.Color(framed).enhance(saturation)
+        return np.array(framed)
 
     return VideoClip(make_frame, duration=duration)
 
 
 def _rgba_border_frame(t, mono, global_max_rms, canvas_size, video_x, video_y, video_w, video_h, color):
-    center = int(t * SAMPLE_RATE)
-    window = int(SAMPLE_RATE * 0.04)
-    start = max(0, center - window // 2)
-    chunk = mono[start:min(len(mono), start + window)]
-    rms = np.sqrt(np.mean(chunk ** 2)) if len(chunk) > 0 else 0
-    norm = np.clip(rms / global_max_rms, 0, 1)
-    thickness = int(BORDER_MIN + norm * (BORDER_MAX - BORDER_MIN))
+    energy = _energy_at(t, mono, global_max_rms)
+    thickness = int(BORDER_MIN + energy * (BORDER_MAX - BORDER_MIN))
 
     img = Image.new("RGBA", canvas_size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
@@ -136,3 +134,53 @@ def make_pulsing_border_clip(
     clip = VideoClip(make_frame, duration=duration)
     mask = VideoClip(make_mask, duration=duration, is_mask=True)
     return clip.with_mask(mask)
+
+
+def build_art_sequence(
+    stills: list[Image.Image],
+    mono: np.ndarray,
+    global_max_rms: float,
+    total_duration: float,
+    panel_size: int,
+    master_seed: int,
+    dissolve: float = DISSOLVE_DURATION,
+    segment_hold: float = SEGMENT_HOLD,
+):
+    """Cycle stills with short crossfades: 1→2→3→1… for the full duration."""
+    n = len(stills)
+    if n == 0:
+        raise ValueError("No stills to animate")
+
+    if n == 1:
+        return make_camera_still_clip(
+            stills[0],
+            mono,
+            global_max_rms,
+            total_duration,
+            panel_size,
+            drift_seed=master_seed + 100,
+        )
+
+    dissolve = min(dissolve, segment_hold / 2)
+    # With padding=-dissolve: out = count*seg - (count-1)*dissolve
+    # seg = hold + dissolve → out = count*hold + dissolve
+    seg = segment_hold + dissolve
+    count = max(n, math.ceil((total_duration - dissolve) / segment_hold))
+
+    clips = []
+    for i in range(count):
+        image = stills[i % n]
+        clip = make_camera_still_clip(
+            image,
+            mono,
+            global_max_rms,
+            seg,
+            panel_size,
+            drift_seed=master_seed + 100 + i,
+        )
+        if i > 0:
+            clip = clip.with_effects([CrossFadeIn(dissolve)])
+        clips.append(clip)
+
+    sequence = concatenate_videoclips(clips, method="compose", padding=-dissolve)
+    return sequence.with_duration(total_duration)

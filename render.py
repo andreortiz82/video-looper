@@ -1,143 +1,112 @@
-import math
 import os
 import random
 from dataclasses import dataclass
 from datetime import datetime
 
 import numpy as np
-from moviepy import (
-    AudioFileClip,
-    CompositeVideoClip,
-    VideoFileClip,
-    concatenate_videoclips,
-)
+from moviepy import AudioFileClip, CompositeVideoClip
 
-from layout import canvas_for_destination, compute_layout, target_video_size
+from art.palette import assert_not_tan
+from art.stills import generate_stills, seed_from_song
+from layout import CANVAS, compute_layout, target_art_size
 from visualizers import (
     SAMPLE_RATE,
+    build_art_sequence,
     make_pulsing_border_clip,
-    make_radial_background_clip,
-    sample_random_colors,
+    make_solid_background_clip,
+    sample_canvas_color,
 )
 
 AUDIO_DIR = "audio"
-VIDEO_DIR = "video"
 OUTPUT_DIR = "output"
-INSTAGRAM_DURATION = 60
+SHORTS_DURATION = 60
 BORDER_COLOR = (255, 255, 255)
 
 
 @dataclass
 class RenderOptions:
-    youtube: bool
-    video_path: str | None = None
-    theme_colors: tuple[tuple[int, int, int], tuple[int, int, int]] | None = None
+    master_seed: int | None = None
 
 
-def sample_theme_colors(video_clip) -> tuple[tuple[int, int, int], tuple[int, int, int]]:
-    frame = video_clip.get_frame(random.uniform(0, video_clip.duration))
-    return sample_random_colors(frame)
-
-
-def render(song_path: str, song_name: str, options: RenderOptions) -> str:
-    label = "YT" if options.youtube else "INSTA"
-    canvas_size = canvas_for_destination(options.youtube)
+def render(song_path: str, song_name: str, options: RenderOptions | None = None) -> str:
+    options = options or RenderOptions()
+    canvas_size = CANVAS
+    master_seed = options.master_seed if options.master_seed is not None else seed_from_song(song_name)
 
     print(f"\n{'=' * 60}")
-    print(f"Rendering: {song_name} [{label}]")
+    print(f"Rendering: {song_name} [SHORTS]")
     print(f"{'=' * 60}")
+    print(f"Master seed: {master_seed}")
 
-    video_clip = VideoFileClip(options.video_path) if options.video_path else None
-    opened_here = video_clip is not None
-    if video_clip is None:
-        video_files = sorted(f for f in os.listdir(VIDEO_DIR) if f.lower().endswith((".mp4", ".mov", ".webm")))
-        if not video_files:
-            raise FileNotFoundError("No video files found in video/")
-        video_path = os.path.join(VIDEO_DIR, random.choice(video_files))
-        print(f"Video loop: {os.path.basename(video_path)}")
-        video_clip = VideoFileClip(video_path)
-        opened_here = True
+    print("Generating stills...")
+    still_results = generate_stills(song_name, master_seed=master_seed)
+    still_images = [r.image for r in still_results]
+    style = still_results[0].name if still_results else "?"
+    print(f"Style: {style} × {len(still_results)} variants (cycled)")
 
-    bg_color, radial_color = options.theme_colors or sample_theme_colors(video_clip)
-    print(f"Background: RGB{bg_color} | Radial: RGB{radial_color}")
-    print("Logo: top_left | Viz: radial | Border: pulsing")
+    frames = [np.array(img.convert("RGB")) for img in still_images]
+    bg_rng = random.Random(master_seed ^ 0xC0FFEE)
+    bg_color = sample_canvas_color(frames, bg_rng)
+    assert_not_tan(bg_color, context="video canvas")
+    print(f"Canvas: RGB{bg_color}")
+    print("Logo: top_left | Border: pulsing | Art: camera-on-still × 3")
 
     audio_clip = AudioFileClip(song_path)
-    if not options.youtube:
-        max_start = max(0, audio_clip.duration - INSTAGRAM_DURATION)
-        start = random.uniform(0, max_start)
-        audio_clip = audio_clip.subclipped(start, start + min(INSTAGRAM_DURATION, audio_clip.duration))
-        print(f"Audio clip: {start:.1f}s – {start + INSTAGRAM_DURATION:.1f}s")
-
-    target_size = target_video_size(canvas_size, options.youtube)
-    scaled_video = video_clip.resized(width=target_size, height=target_size)
-
-    num_loops = math.ceil(audio_clip.duration / scaled_video.duration)
-    print(f"Looping {num_loops}x to cover {audio_clip.duration:.1f}s (video {target_size}px)")
-    looped_video = concatenate_videoclips([scaled_video] * num_loops).with_duration(audio_clip.duration)
+    max_start = max(0, audio_clip.duration - SHORTS_DURATION)
+    start = random.Random(master_seed ^ 0xA11D10).uniform(0, max_start)
+    clip_dur = min(SHORTS_DURATION, audio_clip.duration)
+    audio_clip = audio_clip.subclipped(start, start + clip_dur)
+    print(f"Audio clip: {start:.1f}s – {start + clip_dur:.1f}s ({clip_dur:.1f}s)")
 
     print("Analyzing audio...")
     raw_samples = audio_clip.to_soundarray(fps=SAMPLE_RATE)
     mono = raw_samples.mean(axis=1) if raw_samples.ndim > 1 else raw_samples
 
-    layout = compute_layout(
-        canvas_size,
-        looped_video.w,
-        looped_video.h,
-        audio_clip.duration,
-        options.youtube,
-    )
-
-    center_x = layout.video_x + layout.video_w // 2
-    center_y = layout.video_y + layout.video_h // 2
-    inner_radius = int(layout.video_w * 0.42)
-    outer_radius = int(max(canvas_size) * 0.58)
-
     window_size = int(SAMPLE_RATE * 0.04)
     rms_vals = [
         np.sqrt(np.mean(mono[i:i + window_size] ** 2))
-        for i in range(0, len(mono), window_size // 4)
+        for i in range(0, len(mono), max(1, window_size // 4))
     ]
     global_max_rms = max(rms_vals) + 1e-6
 
+    panel_size = target_art_size(canvas_size)
+    art_sequence = build_art_sequence(
+        still_images,
+        mono,
+        global_max_rms,
+        audio_clip.duration,
+        panel_size,
+        master_seed,
+    )
+
+    layout = compute_layout(canvas_size, panel_size, panel_size, audio_clip.duration)
+
     layers = [
-        make_radial_background_clip(
-            mono,
-            global_max_rms,
-            audio_clip.duration,
-            canvas_size,
-            bg_color,
-            radial_color,
-            center_x,
-            center_y,
-            inner_radius,
-            outer_radius,
-        ),
+        make_solid_background_clip(audio_clip.duration, canvas_size, bg_color),
+        art_sequence.with_position((layout.art_x, layout.art_y)),
         make_pulsing_border_clip(
             mono,
             global_max_rms,
             audio_clip.duration,
             canvas_size,
-            layout.video_x,
-            layout.video_y,
-            layout.video_w,
-            layout.video_h,
+            layout.art_x,
+            layout.art_y,
+            layout.art_w,
+            layout.art_h,
             BORDER_COLOR,
         ),
-        looped_video.with_position((layout.video_x, layout.video_y)),
         layout.logo_clip.with_position((layout.logo_x, layout.logo_y)),
     ]
 
-    final_video = CompositeVideoClip(layers).with_audio(audio_clip)
+    final_video = CompositeVideoClip(layers, size=canvas_size).with_audio(audio_clip)
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_path = os.path.join(OUTPUT_DIR, f"{song_name}_{label}_{timestamp}.mp4")
+    output_path = os.path.join(OUTPUT_DIR, f"{song_name}_SHORTS_{timestamp}.mp4")
     print(f"Writing: {output_path}")
     final_video.write_videofile(output_path, fps=24, codec="libx264", audio_codec="aac")
 
     audio_clip.close()
     final_video.close()
-    if opened_here:
-        video_clip.close()
 
     print(f"Done: {output_path}")
     return output_path

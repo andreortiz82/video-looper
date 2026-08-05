@@ -13,32 +13,19 @@ import numpy as np
 from moviepy import ImageClip
 from PIL import Image
 
-INSTAGRAM_CANVAS = (1080, 1920)
-YOUTUBE_CANVAS = (1920, 1080)
+CANVAS = (1080, 1920)
+ART_SCALE = 0.72
 
 LOGO_PATH = os.path.join(os.path.dirname(__file__), "assets", "rasanova-logo.svg")
-LOGO_POSITION = "top_left"
 LOGO_OPACITY = 0.92
-
-INSTAGRAM_VIDEO_SCALE = 0.72
-YOUTUBE_VIDEO_SCALE = 0.58
-
-LOGO_WIDTH_PORTRAIT = 140
-LOGO_WIDTH_LANDSCAPE = 160
+LOGO_WIDTH = 140
 LOGO_INSET = 32
 LOGO_GAP = 16
 BOTTOM_MARGIN = 48
 
 
-def canvas_for_destination(youtube: bool) -> tuple[int, int]:
-    return YOUTUBE_CANVAS if youtube else INSTAGRAM_CANVAS
-
-
-def target_video_size(canvas_size: tuple[int, int], youtube: bool) -> int:
-    cw, ch = canvas_size
-    if youtube:
-        return int(ch * YOUTUBE_VIDEO_SCALE)
-    return int(cw * INSTAGRAM_VIDEO_SCALE)
+def target_art_size(canvas_size: tuple[int, int] = CANVAS) -> int:
+    return int(canvas_size[0] * ART_SCALE)
 
 
 def _rasterize_logo(target_width: int) -> Image.Image:
@@ -57,32 +44,31 @@ def _logo_clip(duration: float, logo_width: int) -> ImageClip:
 
 @dataclass
 class LayoutResult:
-    video_x: int
-    video_y: int
-    video_w: int
-    video_h: int
+    art_x: int
+    art_y: int
+    art_w: int
+    art_h: int
     logo_x: int
     logo_y: int
     logo_clip: ImageClip
 
 
-def compute_layout(canvas_size, video_w, video_h, duration, youtube):
+def compute_layout(canvas_size, art_w, art_h, duration):
     cw, ch = canvas_size
-    logo_width = LOGO_WIDTH_LANDSCAPE if youtube else LOGO_WIDTH_PORTRAIT
-    logo_clip = _logo_clip(duration, logo_width)
+    logo_clip = _logo_clip(duration, LOGO_WIDTH)
     logo_h = logo_clip.h
 
     logo_x = LOGO_INSET
     logo_y = LOGO_INSET
-    cx = (cw - video_w) // 2
-    cy = max(logo_y + logo_h + LOGO_GAP, (ch - video_h) // 2)
-    cy = min(cy, ch - video_h - BOTTOM_MARGIN)
+    cx = (cw - art_w) // 2
+    cy = max(logo_y + logo_h + LOGO_GAP, (ch - art_h) // 2)
+    cy = min(cy, ch - art_h - BOTTOM_MARGIN)
 
     return LayoutResult(
-        video_x=cx,
-        video_y=cy,
-        video_w=video_w,
-        video_h=video_h,
+        art_x=cx,
+        art_y=cy,
+        art_w=art_w,
+        art_h=art_h,
         logo_x=logo_x,
         logo_y=logo_y,
         logo_clip=logo_clip,
