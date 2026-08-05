@@ -1,13 +1,15 @@
 # video-looper
 
-Generates unique brand-palette artwork for a song, animates three stills with camera motion synced to audio, and exports a 9:16 MP4 for Instagram / YouTube Shorts — with a pulsing border and RasaNova logo.
+Generates unique brand-palette Shorts for a song — explore **Style A**, **Style B**, or the classic camera-on-still layout.
+
+Branch `explore/style-ab-layouts` adds Now Playing card layouts with generated covers and animated backgrounds.
 
 ## Setup
 
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-brew install cairo   # required by cairosvg (logo)
+brew install cairo   # required by cairosvg (logo + covers)
 ```
 
 Needs **FFmpeg** on your PATH (MoviePy).
@@ -23,7 +25,7 @@ There is no `video/` source folder. Artwork is generated per song.
 
 ## Usage
 
-**Single song (interactive picker):**
+**Single song (interactive picker — song + layout):**
 
 ```bash
 .venv/bin/python3 loop_video.py
@@ -32,20 +34,20 @@ There is no `video/` source folder. Artwork is generated per song.
 **Batch (every file in `audio/`):**
 
 ```bash
-.venv/bin/python3 video_bus.py
+.venv/bin/python3 video_bus.py          # classic
+.venv/bin/python3 video_bus.py a        # Style A
+.venv/bin/python3 video_bus.py b        # Style B
 ```
 
-Each song gets one Shorts MP4 in `output/`. Re-running the same filename reuses the same seed (same style + variants); the audio window and canvas color can still vary unless you pin them in code.
+## Layout styles
 
-## What it does
+| Style | Background | Chrome |
+|-------|------------|--------|
+| **A** | Off-center wavy spiral, full-bleed, rotates 360° | Centered logo + Now Playing card (cover over title/date); pulsing randomized border |
+| **B** | Mosaic on brand palette, RMS brightness/sat pulse | Now Playing card: large logo on random accent + cover/meta row; pulsing randomized border |
+| **Classic** | Solid canvas sampled from stills | Camera-on-still panel × 3 variants, top-left logo, white pulsing border |
 
-1. Derives a **deterministic seed** from the song filename
-2. Picks **one generator** and renders **3 variants** of that style
-3. Generates oversized square stills on the RasaNova brand palette
-4. Takes a **random 60s** window of the song
-5. Camera-animates stills (zoom/pan + RMS brightness/saturation), **cycling 1→2→3→1…** with **~0.75s dissolves** every ~4s
-6. Composites solid canvas fill (color sampled from the stills — never Tan), art panel, **pulsing white border**, and **RasaNova logo** top-left
-7. Exports `1080×1920` Shorts MP4 @ 24fps
+Covers are recolored from `assets/covers/base/*.svg` (vendored from rasanova). **Tan `#F0E6D0` is eye sclera only** — locked on eye tiles, remapped away on everything else.
 
 ## Brand palette
 
@@ -69,33 +71,38 @@ Each song gets one Shorts MP4 in `output/`. Re-running the same filename reuses 
 | `kaleidoscope` | 4-fold mirror triangle grid |
 | `kalenova` | Kaleidoscope × rasanova motifs |
 | `rasanova` | Flat pop-art eyes, stars, textures |
-| `mosaic` | Geometric mosaic cell grid |
+| `mosaic` | Geometric mosaic cell grid (Style B bg) |
 | `mosaova` | Mosaic grid × rasanova eyes/starbursts |
+| `spiral` | Wavy nested-square spiral (Style A bg; not used in classic still cycle) |
 
 ## Project structure
 
 ```
 video-looper/
-├── assets/           # RasaNova logo (SVG)
-├── audio/            # Input songs (gitignored media)
-├── art/              # Generators + brand palette
-│   ├── palette.py    # Colors + Tan-reserved rule
-│   ├── stills.py     # Seed → style → 3 variants
-│   └── generators/
-├── output/           # Exported MP4s (gitignored)
-├── visualizers.py    # Camera-on-still, border, dissolves
-├── layout.py         # 9:16 canvas, art scale, logo
-├── render.py         # Shorts pipeline
-├── loop_video.py     # Interactive CLI
-└── video_bus.py      # Batch CLI
+├── assets/
+│   ├── rasanova-logo.svg
+│   └── covers/base/      # SVG cover templates
+├── audio/                # Input songs (gitignored media)
+├── art/
+│   ├── palette.py
+│   ├── covers.py         # SVG recolor + rasterize
+│   ├── stills.py
+│   └── generators/       # spiral, mosaic, …
+├── chrome.py             # Now Playing cards + logo
+├── visualizers.py
+├── layout.py             # Classic geometry
+├── render.py
+├── loop_video.py
+└── video_bus.py
 ```
 
 ## Output
 
 ```
-output/Song Name_SHORTS_YYYYMMDD_HHMMSS.mp4
+output/Song Name_SHORTS_STYLE_A_YYYYMMDD_HHMMSS.mp4
+output/Song Name_SHORTS_STYLE_B_YYYYMMDD_HHMMSS.mp4
+output/Song Name_SHORTS_YYYYMMDD_HHMMSS.mp4          # classic
 ```
 
 - Size: `1080×1920` (9:16)
 - Duration: up to 60 seconds
-- Layers: canvas → cycling art → pulsing border → logo

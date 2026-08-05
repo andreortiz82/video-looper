@@ -57,6 +57,22 @@ MOSAIC_PALETTES: list[list[tuple[int, int, int]]] = [
     ACCENTS[:],
 ]
 
+# Spiral: (fg, bg) pairs — no Tan
+SPIRAL_PALETTES: list[tuple[tuple[int, int, int], tuple[int, int, int]]] = [
+    (SLATE, BLUE),
+    (SLATE, RED),
+    (SLATE, ORANGE),
+    (SLATE, YELLOW),
+    (SLATE, GREEN),
+    (SLATE, PURPLE),
+    (SLATE, PINK),
+    (WHITE, BLUE),
+    (WHITE, RED),
+    (WHITE, PURPLE),
+    (BLUE, SLATE),
+    (RED, SLATE),
+]
+
 # Rasanova / Kalenova style dicts — no Tan backgrounds or accents
 RASANOVA_PALETTES: list[dict[str, object]] = [
     {"bg": SLATE, "accents": [RED, ORANGE, YELLOW, PINK], "secondary": RED},

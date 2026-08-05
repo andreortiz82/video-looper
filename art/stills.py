@@ -12,7 +12,8 @@ from art.generators import GENERATORS
 from art.rng import make_rng
 
 STILL_SIZE = 1600
-GENERATOR_NAMES = list(GENERATORS.keys())
+# Spiral is reserved for Style A full-bleed rotation — not classic still cycling.
+GENERATOR_NAMES = [name for name in GENERATORS if name != "spiral"]
 STILLS_PER_SONG = 3
 
 

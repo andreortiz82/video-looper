@@ -96,9 +96,21 @@ def make_camera_still_clip(
     return VideoClip(make_frame, duration=duration)
 
 
-def _rgba_border_frame(t, mono, global_max_rms, canvas_size, video_x, video_y, video_w, video_h, color):
+def _rgba_border_frame(
+    t,
+    mono,
+    global_max_rms,
+    canvas_size,
+    video_x,
+    video_y,
+    video_w,
+    video_h,
+    color,
+    border_min=BORDER_MIN,
+    border_max=BORDER_MAX,
+):
     energy = _energy_at(t, mono, global_max_rms)
-    thickness = int(BORDER_MIN + energy * (BORDER_MAX - BORDER_MIN))
+    thickness = int(border_min + energy * (border_max - border_min))
 
     img = Image.new("RGBA", canvas_size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
@@ -117,23 +129,265 @@ def _rgba_border_frame(t, mono, global_max_rms, canvas_size, video_x, video_y, v
 
 
 def make_pulsing_border_clip(
-    mono, global_max_rms, duration, canvas_size, video_x, video_y, video_w, video_h, color
+    mono,
+    global_max_rms,
+    duration,
+    canvas_size,
+    video_x,
+    video_y,
+    video_w,
+    video_h,
+    color,
+    *,
+    border_min=BORDER_MIN,
+    border_max=BORDER_MAX,
 ):
     def make_frame(t):
         rgb, _ = _rgba_border_frame(
-            t, mono, global_max_rms, canvas_size, video_x, video_y, video_w, video_h, color
+            t,
+            mono,
+            global_max_rms,
+            canvas_size,
+            video_x,
+            video_y,
+            video_w,
+            video_h,
+            color,
+            border_min=border_min,
+            border_max=border_max,
         )
         return rgb
 
     def make_mask(t):
         _, alpha = _rgba_border_frame(
-            t, mono, global_max_rms, canvas_size, video_x, video_y, video_w, video_h, color
+            t,
+            mono,
+            global_max_rms,
+            canvas_size,
+            video_x,
+            video_y,
+            video_w,
+            video_h,
+            color,
+            border_min=border_min,
+            border_max=border_max,
         )
         return alpha
 
     clip = VideoClip(make_frame, duration=duration)
     mask = VideoClip(make_mask, duration=duration, is_mask=True)
     return clip.with_mask(mask)
+
+
+def make_rotating_background_clip(
+    image: Image.Image,
+    duration: float,
+    canvas_size: tuple[int, int],
+    *,
+    revolutions: float = 1.0,
+):
+    """Full-bleed background that spins; oversized source hides rotation corners."""
+    cw, ch = canvas_size
+    diag = int(math.ceil(math.hypot(cw, ch))) + 4
+    src = image.convert("RGB")
+    scale = max(diag / src.width, diag / src.height)
+    spun_size = max(diag, int(max(src.width, src.height) * scale))
+    base = src.resize((spun_size, spun_size), Image.Resampling.LANCZOS)
+    cx = (spun_size - cw) // 2
+    cy = (spun_size - ch) // 2
+
+    def make_frame(t):
+        angle = -360.0 * revolutions * (t / duration if duration > 0 else 0)
+        rotated = base.rotate(angle, resample=Image.Resampling.BILINEAR, expand=False)
+        frame = rotated.crop((cx, cy, cx + cw, cy + ch))
+        return np.array(frame)
+
+    return VideoClip(make_frame, duration=duration)
+
+
+def make_pulse_still_background_clip(
+    image: Image.Image,
+    mono: np.ndarray,
+    global_max_rms: float,
+    duration: float,
+    canvas_size: tuple[int, int],
+):
+    """Full-bleed still with RMS zoom + brightness/saturation pulse."""
+    cw, ch = canvas_size
+    fitted = image.convert("RGB").resize((cw, ch), Image.Resampling.LANCZOS)
+
+    def make_frame(t):
+        energy = _energy_at(t, mono, global_max_rms)
+        zoom = 1.0 + energy * 0.035
+        crop_w = cw / zoom
+        crop_h = ch / zoom
+        ox = (cw - crop_w) / 2
+        oy = (ch - crop_h) / 2
+        cropped = fitted.crop((int(ox), int(oy), int(ox + crop_w), int(oy + crop_h)))
+        framed = cropped.resize((cw, ch), Image.Resampling.LANCZOS)
+        framed = ImageEnhance.Brightness(framed).enhance(1.0 + energy * 0.12)
+        framed = ImageEnhance.Color(framed).enhance(1.0 + energy * 0.18)
+        return np.array(framed)
+
+    return VideoClip(make_frame, duration=duration)
+
+
+# Peak-driven hard cuts: ignore micro-spikes, keep cuts musically spaced.
+CUT_MIN_GAP = 2.0
+CUT_PEAK_THRESHOLD = 0.42
+CUT_RISE = 0.08
+CUT_HOP_SEC = 0.05
+
+
+def detect_cut_times(
+    mono: np.ndarray,
+    global_max_rms: float,
+    duration: float,
+    *,
+    min_gap: float = CUT_MIN_GAP,
+    peak_threshold: float = CUT_PEAK_THRESHOLD,
+) -> list[float]:
+    """Return cut timestamps on volume peaks / sharp rises (not a fixed timer)."""
+    if duration <= 0 or len(mono) == 0:
+        return []
+
+    hop = max(1, int(SAMPLE_RATE * CUT_HOP_SEC))
+    window = max(hop, int(SAMPLE_RATE * 0.04))
+    energies: list[tuple[float, float]] = []
+    for i in range(0, len(mono) - window, hop):
+        t = i / SAMPLE_RATE
+        if t >= duration:
+            break
+        rms = float(np.sqrt(np.mean(mono[i : i + window] ** 2)))
+        energies.append((t, float(np.clip(rms / global_max_rms, 0, 1))))
+
+    if len(energies) < 3:
+        return []
+
+    cuts: list[float] = []
+    last_cut = -min_gap
+    for i in range(1, len(energies) - 1):
+        t, e = energies[i]
+        prev_e = energies[i - 1][1]
+        next_e = energies[i + 1][1]
+        is_peak = e >= prev_e and e >= next_e
+        rising = e - prev_e >= CUT_RISE
+        if not (is_peak or rising):
+            continue
+        if e < peak_threshold and not (rising and e >= peak_threshold * 0.75):
+            continue
+        if t - last_cut < min_gap:
+            continue
+        # Skip a cut at t≈0 — start on first still, cut later on peaks.
+        if t < 0.35:
+            continue
+        cuts.append(t)
+        last_cut = t
+
+    # If the track is quiet/flat, fall back to a few evenly spaced cuts.
+    if len(cuts) < 2:
+        step = max(min_gap, duration / 4)
+        cuts = [t for t in np.arange(step, duration, step).tolist() if t < duration - 0.25]
+
+    return cuts
+
+
+def _still_index_at(t: float, cut_times: list[float]) -> int:
+    # Number of cuts that have already happened.
+    idx = 0
+    for cut in cut_times:
+        if t >= cut:
+            idx += 1
+        else:
+            break
+    return idx
+
+
+def _prepare_bg_bases(
+    stills: list[Image.Image],
+    canvas_size: tuple[int, int],
+    *,
+    rotate: bool,
+) -> list[Image.Image]:
+    cw, ch = canvas_size
+    prepared: list[Image.Image] = []
+    if rotate:
+        # Extra headroom for rotation + music zoom.
+        diag = int(math.ceil(math.hypot(cw, ch) * 1.12)) + 4
+        for image in stills:
+            src = image.convert("RGB")
+            scale = max(diag / src.width, diag / src.height)
+            size = max(diag, int(max(src.width, src.height) * scale))
+            prepared.append(src.resize((size, size), Image.Resampling.LANCZOS))
+    else:
+        for image in stills:
+            prepared.append(image.convert("RGB").resize((cw, ch), Image.Resampling.LANCZOS))
+    return prepared
+
+
+def build_hard_cut_background_sequence(
+    stills: list[Image.Image],
+    mono: np.ndarray,
+    global_max_rms: float,
+    total_duration: float,
+    canvas_size: tuple[int, int],
+    *,
+    rotate: bool = False,
+    revolutions: float = 1.0,
+    min_gap: float = CUT_MIN_GAP,
+):
+    """Cycle backgrounds with hard cuts on musical peaks; pulse zoom to RMS.
+
+    Style A: rotate continuously + zoom/bounce + brightness/sat.
+    Style B: zoom/bounce + brightness/sat (no rotate).
+    """
+    n = len(stills)
+    if n == 0:
+        raise ValueError("No background stills to animate")
+
+    cw, ch = canvas_size
+    cut_times = detect_cut_times(mono, global_max_rms, total_duration, min_gap=min_gap)
+    print(f"  Background cuts: {len(cut_times)} peak-driven hard cuts")
+    bases = _prepare_bg_bases(stills, canvas_size, rotate=rotate)
+
+    def make_frame(t):
+        energy = _energy_at(t, mono, global_max_rms)
+        still_i = _still_index_at(t, cut_times) % n
+        base = bases[still_i]
+        zoom = 1.0 + energy * 0.05
+
+        if rotate:
+            angle = -360.0 * revolutions * (t / total_duration if total_duration > 0 else 0)
+            rotated = base.rotate(angle, resample=Image.Resampling.BILINEAR, expand=False)
+            crop_w = cw / zoom
+            crop_h = ch / zoom
+            ox = (rotated.width - crop_w) / 2
+            oy = (rotated.height - crop_h) / 2
+            framed = rotated.crop((int(ox), int(oy), int(ox + crop_w), int(oy + crop_h)))
+            framed = framed.resize((cw, ch), Image.Resampling.LANCZOS)
+            framed = ImageEnhance.Brightness(framed).enhance(1.0 + energy * 0.14)
+            framed = ImageEnhance.Color(framed).enhance(1.0 + energy * 0.2)
+            return np.array(framed)
+
+        crop_w = cw / zoom
+        crop_h = ch / zoom
+        ox = (cw - crop_w) / 2
+        oy = (ch - crop_h) / 2
+        cropped = base.crop((int(ox), int(oy), int(ox + crop_w), int(oy + crop_h)))
+        framed = cropped.resize((cw, ch), Image.Resampling.LANCZOS)
+        framed = ImageEnhance.Brightness(framed).enhance(1.0 + energy * 0.12)
+        framed = ImageEnhance.Color(framed).enhance(1.0 + energy * 0.18)
+        return np.array(framed)
+
+    return VideoClip(make_frame, duration=total_duration)
+
+
+def pick_accent_color(rng: random.Random) -> tuple[int, int, int]:
+    from art.palette import ACCENTS, assert_not_tan
+
+    color = rng.choice(ACCENTS)
+    assert_not_tan(color, context="accent")
+    return color
 
 
 def build_art_sequence(
