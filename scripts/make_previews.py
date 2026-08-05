@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Write static Style A / B / C preview PNGs for a song (3 variants each).
 
+Style A/B variants each use a distinct cover template so review covers more
+of assets/covers/base/. Full MP4 renders still lock one cover per song.
+
 Examples:
   .venv/bin/python3 scripts/make_previews.py "04 - Whale Song.wav"
   .venv/bin/python3 scripts/make_previews.py "08 - Space Cowboy.wav"

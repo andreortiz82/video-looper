@@ -8,7 +8,7 @@ from moviepy import AudioFileClip, CompositeVideoClip
 from moviepy.audio.fx import AudioFadeIn, AudioFadeOut
 from PIL import Image, ImageDraw
 
-from art.covers import generate_cover
+from art.covers import BASE_COVER_FILES, generate_cover
 from art.generators.kaleidoscope import generate_kaleidoscope
 from art.generators.mosaic import generate_mosaic
 from art.generators.spiral import generate_spiral
@@ -223,20 +223,35 @@ def write_layout_previews(
     master_seed: int | None = None,
     song_date: str | None = None,
 ) -> list[str]:
-    """Write static preview PNGs for Style A / B / C (3 variants each)."""
+    """Write static preview PNGs for Style A / B / C (3 variants each).
+
+    Full renders lock one cover per song (`seed ^ 0xC0C0`). Previews force
+    three distinct cover templates so review shows more of the base set.
+    """
     seed = master_seed if master_seed is not None else seed_from_song(song_name)
     canvas_size = CANVAS
     os.makedirs(PREVIEW_DIR, exist_ok=True)
 
-    cover = generate_cover(random.Random(seed ^ 0xC0C0), size=NP_COVER_SIZE)
     title = display_title(song_name)
     date = format_song_date(song_path, song_date)
     logo_bg_b = pick_accent_color(random.Random(seed ^ 0xD00D))
     logo_bg_c = pick_accent_color(random.Random(seed ^ 0xC0FFEE))
     canvas_c = pick_accent_color(random.Random(seed ^ 0xB6C010))
 
-    card_a = build_style_a_card(cover.image, title, date)
-    card_b = build_style_b_card(cover.image, title, date, logo_bg_b)
+    # Distinct templates for preview diversity (renders still use rng.choice once).
+    cover_rng = random.Random(seed ^ 0xC0C0)
+    templates = list(BASE_COVER_FILES)
+    cover_rng.shuffle(templates)
+    covers = []
+    for i in range(BG_VARIANTS):
+        name = templates[i % len(templates)]
+        cover = generate_cover(
+            random.Random(seed ^ 0xC0C0 ^ (0x9E3779B9 * (i + 1))),
+            size=NP_COVER_SIZE,
+            filename=name,
+        )
+        covers.append(cover)
+        print(f"Cover variant {i + 1}: {cover.filename}")
 
     spirals = _generate_spiral_backgrounds(seed)
     mosaics = _generate_mosaic_backgrounds(seed, canvas_size)
@@ -244,15 +259,17 @@ def write_layout_previews(
 
     paths: list[str] = []
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    for i, bg in enumerate(spirals, 1):
+    for i, bg in enumerate(spirals):
+        card_a = build_style_a_card(covers[i].image, title, date)
         frame = _composite_preview_frame(bg, card_a, style=LAYOUT_A)
-        path = os.path.join(PREVIEW_DIR, f"{song_name}_STYLE_A_bg{i}_{stamp}.png")
+        path = os.path.join(PREVIEW_DIR, f"{song_name}_STYLE_A_bg{i + 1}_{stamp}.png")
         frame.save(path)
         paths.append(path)
         print(f"Preview: {path}")
-    for i, bg in enumerate(mosaics, 1):
+    for i, bg in enumerate(mosaics):
+        card_b = build_style_b_card(covers[i].image, title, date, logo_bg_b)
         frame = _composite_preview_frame(bg, card_b, style=LAYOUT_B)
-        path = os.path.join(PREVIEW_DIR, f"{song_name}_STYLE_B_bg{i}_{stamp}.png")
+        path = os.path.join(PREVIEW_DIR, f"{song_name}_STYLE_B_bg{i + 1}_{stamp}.png")
         frame.save(path)
         paths.append(path)
         print(f"Preview: {path}")

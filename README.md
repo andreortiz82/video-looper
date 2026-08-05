@@ -61,6 +61,7 @@ chmod +x scripts/render_both.sh
 ```bash
 .venv/bin/python3 scripts/make_previews.py "04 - Whale Song.wav"
 # → output/preview/<Song>_STYLE_A_bg1_….png … STYLE_C_v3_….png
+# Style A/B variants each use a distinct cover template for review diversity.
 ```
 
 **Batch every file in `audio/`:**
@@ -77,7 +78,7 @@ chmod +x scripts/render_both.sh
 |--------|----------------|
 | [`scripts/render_song.py`](scripts/render_song.py) | Render one MP4: `song` + `a\|b\|c` |
 | [`scripts/render_both.sh`](scripts/render_both.sh) | Render Style A, B, then C for one song |
-| [`scripts/make_previews.py`](scripts/make_previews.py) | Write 9 static review PNGs (A×3, B×3, C×3) |
+| [`scripts/make_previews.py`](scripts/make_previews.py) | Write 9 static review PNGs (A×3, B×3, C×3; distinct covers on A/B) |
 | [`loop_video.py`](loop_video.py) | Interactive song + layout picker |
 | [`video_bus.py`](video_bus.py) | Batch-render all songs in `audio/` |
 
@@ -105,7 +106,7 @@ for style in ("a", "b", "c"):
 
 Shared meta bar (title + date): **180px** tall, same fonts/spacing across A / B / C.
 
-Covers are recolored from `assets/covers/base/*.svg`. **Tan `#F0E6D0` is eye sclera only** — never used as background or non-eye fill.
+Covers are recolored from `assets/covers/base/*.svg` (8 templates). Full MP4 renders lock **one cover per song** (seeded). Preview batches force **three distinct templates** on Style A/B so review shows more of the set. Style C uses kaleidoscope art instead of a cover. **Tan `#F0E6D0` is eye sclera only** — never used as background or non-eye fill.
 
 ## Brand palette
 
@@ -167,4 +168,4 @@ output/preview/<Song>_STYLE_A_bg1_….png
 - Size: `1080×1920` (9:16)
 - Duration: up to 60 seconds (random window of the track)
 - Audio: **1s fade-in** and **1s fade-out** on the clipped window
-- Same filename → same seed (deterministic art); peak cuts follow that audio window
+- Same filename → same seed (deterministic art + one cover); peak cuts follow that audio window
