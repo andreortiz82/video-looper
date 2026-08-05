@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write static Style A/B preview PNGs for a song (3 backgrounds each).
+"""Write static Style A / B / C preview PNGs for a song (3 variants each).
 
 Examples:
   .venv/bin/python3 scripts/make_previews.py "04 - Whale Song.wav"

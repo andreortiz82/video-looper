@@ -5,57 +5,62 @@ from datetime import datetime
 
 import numpy as np
 from moviepy import AudioFileClip, CompositeVideoClip
+from moviepy.audio.fx import AudioFadeIn, AudioFadeOut
 from PIL import Image, ImageDraw
 
 from art.covers import generate_cover
+from art.generators.kaleidoscope import generate_kaleidoscope
 from art.generators.mosaic import generate_mosaic
 from art.generators.spiral import generate_spiral
 from art.palette import WHITE, assert_not_tan
 from art.rng import make_rng
-from art.stills import generate_stills, seed_from_song
+from art.stills import seed_from_song
 from chrome import (
     build_style_a_card,
     build_style_b_card,
+    build_style_c_card,
     display_title,
     format_song_date,
     layout_style_a,
     layout_style_b,
+    layout_style_c,
     logo_image,
     LOGO_SIZE_A,
     LOGO_TOP_A,
 )
-from layout import CANVAS, compute_layout, target_art_size
+from layout import CANVAS
 from visualizers import (
     SAMPLE_RATE,
-    build_art_sequence,
     build_hard_cut_background_sequence,
+    build_hard_cut_card_sequence,
     make_pulsing_border_clip,
-    make_solid_background_clip,
+    make_solid_pulse_background_clip,
     pick_accent_color,
-    sample_canvas_color,
 )
 
 AUDIO_DIR = "audio"
 OUTPUT_DIR = "output"
 PREVIEW_DIR = os.path.join(OUTPUT_DIR, "preview")
 SHORTS_DURATION = 60
+AUDIO_FADE = 1.0  # seconds in/out on the clipped window
 BORDER_COLOR = WHITE
 NP_COVER_SIZE = 800
+KALEIDO_SIZE = 1600
 BG_VARIANTS = 3
-# Thicker white NP border (Style A / B)
+# Thicker white NP border
 NP_BORDER_MIN = 16
 NP_BORDER_MAX = 36
 
-LAYOUT_CLASSIC = "classic"
 LAYOUT_A = "a"
 LAYOUT_B = "b"
-LAYOUT_STYLES = (LAYOUT_CLASSIC, LAYOUT_A, LAYOUT_B)
+LAYOUT_C = "c"
+LAYOUT_STYLES = (LAYOUT_A, LAYOUT_B, LAYOUT_C)
 
 
 @dataclass
 class RenderOptions:
     master_seed: int | None = None
-    layout_style: str = LAYOUT_CLASSIC
+    layout_style: str = LAYOUT_A
     song_date: str | None = None
 
 
@@ -77,7 +82,10 @@ def _audio_window(song_path: str, master_seed: int):
     start = random.Random(master_seed ^ 0xA11D10).uniform(0, max_start)
     clip_dur = min(SHORTS_DURATION, audio_clip.duration)
     audio_clip = audio_clip.subclipped(start, start + clip_dur)
+    fade = min(AUDIO_FADE, audio_clip.duration / 4)
+    audio_clip = audio_clip.with_effects([AudioFadeIn(fade), AudioFadeOut(fade)])
     print(f"Audio clip: {start:.1f}s – {start + clip_dur:.1f}s ({clip_dur:.1f}s)")
+    print(f"Audio fades: {fade:.1f}s in / out")
     return audio_clip
 
 
@@ -85,8 +93,7 @@ def _write_output(layers, canvas_size, audio_clip, song_name, style_tag: str) ->
     final_video = CompositeVideoClip(layers, size=canvas_size).with_audio(audio_clip)
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    tag = f"SHORTS_{style_tag}" if style_tag != "CLASSIC" else "SHORTS"
-    output_path = os.path.join(OUTPUT_DIR, f"{song_name}_{tag}_{timestamp}.mp4")
+    output_path = os.path.join(OUTPUT_DIR, f"{song_name}_SHORTS_{style_tag}_{timestamp}.mp4")
     print(f"Writing: {output_path}")
     final_video.write_videofile(output_path, fps=24, codec="libx264", audio_codec="aac")
     audio_clip.close()
@@ -152,6 +159,17 @@ def _generate_mosaic_backgrounds(
     return images
 
 
+def _generate_kaleidoscope_stills(master_seed: int, count: int = BG_VARIANTS) -> list[Image.Image]:
+    images: list[Image.Image] = []
+    print(f"Generating {count} kaleidoscope stills...")
+    for i in range(count):
+        rng, _ = make_rng(master_seed ^ 0xCA1E10 ^ (i + 1) * 0x3333)
+        canvas = generate_kaleidoscope(width=KALEIDO_SIZE, height=KALEIDO_SIZE, rng=rng)
+        images.append(canvas.image.copy())
+        print(f"  Kaleidoscope {i + 1}/{count}")
+    return images
+
+
 def _composite_preview_frame(
     background: Image.Image,
     card: Image.Image,
@@ -162,7 +180,10 @@ def _composite_preview_frame(
 ) -> Image.Image:
     """Static review frame: bg + card + white border (+ centered logo for Style A)."""
     cw, ch = canvas_size
-    frame = background.convert("RGB").resize((cw, ch), Image.Resampling.LANCZOS)
+    if isinstance(background, tuple):
+        frame = Image.new("RGB", canvas_size, background)
+    else:
+        frame = background.convert("RGB").resize((cw, ch), Image.Resampling.LANCZOS)
     card_rgb = card.convert("RGB")
     card_w, card_h = card_rgb.size
     card_x = (cw - card_w) // 2
@@ -202,7 +223,7 @@ def write_layout_previews(
     master_seed: int | None = None,
     song_date: str | None = None,
 ) -> list[str]:
-    """Write static preview PNGs for Style A/B × 3 background variants."""
+    """Write static preview PNGs for Style A / B / C (3 variants each)."""
     seed = master_seed if master_seed is not None else seed_from_song(song_name)
     canvas_size = CANVAS
     os.makedirs(PREVIEW_DIR, exist_ok=True)
@@ -210,13 +231,16 @@ def write_layout_previews(
     cover = generate_cover(random.Random(seed ^ 0xC0C0), size=NP_COVER_SIZE)
     title = display_title(song_name)
     date = format_song_date(song_path, song_date)
-    logo_bg = pick_accent_color(random.Random(seed ^ 0xD00D))
+    logo_bg_b = pick_accent_color(random.Random(seed ^ 0xD00D))
+    logo_bg_c = pick_accent_color(random.Random(seed ^ 0xC0FFEE))
+    canvas_c = pick_accent_color(random.Random(seed ^ 0xB6C010))
 
     card_a = build_style_a_card(cover.image, title, date)
-    card_b = build_style_b_card(cover.image, title, date, logo_bg)
+    card_b = build_style_b_card(cover.image, title, date, logo_bg_b)
 
     spirals = _generate_spiral_backgrounds(seed)
     mosaics = _generate_mosaic_backgrounds(seed, canvas_size)
+    kaleidos = _generate_kaleidoscope_stills(seed)
 
     paths: list[str] = []
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -232,56 +256,14 @@ def write_layout_previews(
         frame.save(path)
         paths.append(path)
         print(f"Preview: {path}")
+    for i, art in enumerate(kaleidos, 1):
+        card_c = build_style_c_card(art, title, date, logo_bg_c)
+        frame = _composite_preview_frame(canvas_c, card_c, style=LAYOUT_C)
+        path = os.path.join(PREVIEW_DIR, f"{song_name}_STYLE_C_v{i}_{stamp}.png")
+        frame.save(path)
+        paths.append(path)
+        print(f"Preview: {path}")
     return paths
-
-
-def _render_classic(song_path: str, song_name: str, master_seed: int) -> str:
-    canvas_size = CANVAS
-    print("Generating stills...")
-    still_results = generate_stills(song_name, master_seed=master_seed)
-    still_images = [r.image for r in still_results]
-    style = still_results[0].name if still_results else "?"
-    print(f"Style: {style} × {len(still_results)} variants (cycled)")
-
-    frames = [np.array(img.convert("RGB")) for img in still_images]
-    bg_rng = random.Random(master_seed ^ 0xC0FFEE)
-    bg_color = sample_canvas_color(frames, bg_rng)
-    assert_not_tan(bg_color, context="video canvas")
-    print(f"Canvas: RGB{bg_color}")
-    print("Logo: top_left | Border: pulsing | Art: camera-on-still × 3")
-
-    audio_clip = _audio_window(song_path, master_seed)
-    print("Analyzing audio...")
-    mono, global_max_rms = _analyze_audio(audio_clip)
-
-    panel_size = target_art_size(canvas_size)
-    art_sequence = build_art_sequence(
-        still_images,
-        mono,
-        global_max_rms,
-        audio_clip.duration,
-        panel_size,
-        master_seed,
-    )
-    layout = compute_layout(canvas_size, panel_size, panel_size, audio_clip.duration)
-
-    layers = [
-        make_solid_background_clip(audio_clip.duration, canvas_size, bg_color),
-        art_sequence.with_position((layout.art_x, layout.art_y)),
-        make_pulsing_border_clip(
-            mono,
-            global_max_rms,
-            audio_clip.duration,
-            canvas_size,
-            layout.art_x,
-            layout.art_y,
-            layout.art_w,
-            layout.art_h,
-            BORDER_COLOR,
-        ),
-        layout.logo_clip.with_position((layout.logo_x, layout.logo_y)),
-    ]
-    return _write_output(layers, canvas_size, audio_clip, song_name, "CLASSIC")
 
 
 def _render_style_a(song_path: str, song_name: str, master_seed: int, song_date: str | None) -> str:
@@ -359,10 +341,50 @@ def _render_style_b(song_path: str, song_name: str, master_seed: int, song_date:
     return _write_output(layers, canvas_size, audio_clip, song_name, "STYLE_B")
 
 
+def _render_style_c(song_path: str, song_name: str, master_seed: int, song_date: str | None) -> str:
+    canvas_size = CANVAS
+    kaleidos = _generate_kaleidoscope_stills(master_seed)
+
+    canvas_color = pick_accent_color(random.Random(master_seed ^ 0xB6C010))
+    logo_bg = pick_accent_color(random.Random(master_seed ^ 0xC0FFEE))
+    title = display_title(song_name)
+    date = format_song_date(song_path, song_date)
+    cards = [build_style_c_card(art, title, date, logo_bg) for art in kaleidos]
+    print(f"Canvas: RGB{canvas_color} | Logo bg: RGB{logo_bg} | Border: white")
+    print(f"Title: {title} | Date: {date}")
+    print(f"Cards: {len(cards)} kaleidoscope variants (peak cuts)")
+
+    audio_clip = _audio_window(song_path, master_seed)
+    print("Analyzing audio...")
+    mono, global_max_rms = _analyze_audio(audio_clip)
+
+    chrome = layout_style_c(cards[0], audio_clip.duration, canvas_size)
+    bg = make_solid_pulse_background_clip(
+        canvas_color,
+        mono,
+        global_max_rms,
+        audio_clip.duration,
+        canvas_size,
+    )
+    card_seq = build_hard_cut_card_sequence(
+        cards,
+        mono,
+        global_max_rms,
+        audio_clip.duration,
+    )
+
+    layers = [
+        bg,
+        card_seq.with_position((chrome.card_x, chrome.card_y)),
+        _np_border_clip(mono, global_max_rms, audio_clip.duration, canvas_size, chrome),
+    ]
+    return _write_output(layers, canvas_size, audio_clip, song_name, "STYLE_C")
+
+
 def render(song_path: str, song_name: str, options: RenderOptions | None = None) -> str:
     options = options or RenderOptions()
     master_seed = options.master_seed if options.master_seed is not None else seed_from_song(song_name)
-    style = (options.layout_style or LAYOUT_CLASSIC).lower()
+    style = (options.layout_style or LAYOUT_A).lower()
     if style not in LAYOUT_STYLES:
         raise ValueError(f"Unknown layout_style {style!r}; expected one of {LAYOUT_STYLES}")
 
@@ -375,4 +397,4 @@ def render(song_path: str, song_name: str, options: RenderOptions | None = None)
         return _render_style_a(song_path, song_name, master_seed, options.song_date)
     if style == LAYOUT_B:
         return _render_style_b(song_path, song_name, master_seed, options.song_date)
-    return _render_classic(song_path, song_name, master_seed)
+    return _render_style_c(song_path, song_name, master_seed, options.song_date)

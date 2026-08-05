@@ -1,24 +1,23 @@
 import os
 
 from art.stills import seed_from_song
-from render import AUDIO_DIR, LAYOUT_A, LAYOUT_B, LAYOUT_CLASSIC, RenderOptions, render
+from render import AUDIO_DIR, LAYOUT_A, LAYOUT_B, LAYOUT_C, RenderOptions, render
 
 LAYOUT_CHOICES = {
     "1": LAYOUT_A,
     "a": LAYOUT_A,
     "2": LAYOUT_B,
     "b": LAYOUT_B,
-    "3": LAYOUT_CLASSIC,
-    "c": LAYOUT_CLASSIC,
-    "classic": LAYOUT_CLASSIC,
+    "3": LAYOUT_C,
+    "c": LAYOUT_C,
 }
 
 
 def _pick_layout() -> str:
     print("\nSelect layout style:")
-    print("  1. Style A — rotating spiral + centered Now Playing")
-    print("  2. Style B — mosaic + logo Now Playing card")
-    print("  3. Classic — camera-on-still panel (current pipeline)")
+    print("  1. Style A — spiral background + cover Now Playing")
+    print("  2. Style B — mosaic background + logo Now Playing")
+    print("  3. Style C — solid color + kaleidoscope Now Playing")
     while True:
         choice = input("Enter number (or a/b/c): ").strip().lower()
         if choice in LAYOUT_CHOICES:

@@ -4,7 +4,7 @@
 Examples:
   .venv/bin/python3 scripts/render_song.py "04 - Whale Song.wav" a
   .venv/bin/python3 scripts/render_song.py audio/02\\ -\\ Little\\ E.wav b
-  .venv/bin/python3 scripts/render_song.py "07 - Gumbia.wav" classic
+  .venv/bin/python3 scripts/render_song.py "07 - Gumbia.wav" c
 """
 
 from __future__ import annotations
@@ -12,7 +12,6 @@ from __future__ import annotations
 import os
 import sys
 
-# Allow running from repo root or scripts/
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
@@ -21,13 +20,13 @@ os.chdir(ROOT)
 from art.stills import seed_from_song
 from render import LAYOUT_STYLES, RenderOptions, render
 
-ALIASES = {"a": "a", "b": "b", "classic": "classic", "c": "classic"}
+ALIASES = {"a": "a", "b": "b", "c": "c"}
 
 
 def main() -> None:
     if len(sys.argv) < 3:
         raise SystemExit(
-            "Usage: scripts/render_song.py <audio-file> <a|b|classic>\n"
+            "Usage: scripts/render_song.py <audio-file> <a|b|c>\n"
             'Example: .venv/bin/python3 scripts/render_song.py "04 - Whale Song.wav" a'
         )
 
@@ -35,7 +34,7 @@ def main() -> None:
     style_key = sys.argv[2].strip().lower()
     layout_style = ALIASES.get(style_key, style_key)
     if layout_style not in LAYOUT_STYLES:
-        raise SystemExit(f"Unknown style {sys.argv[2]!r}; use a, b, or classic")
+        raise SystemExit(f"Unknown style {sys.argv[2]!r}; use a, b, or c")
 
     song_path = song_arg if os.path.isabs(song_arg) else song_arg
     if not os.path.isfile(song_path):

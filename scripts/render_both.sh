@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Render Style A and Style B for one song.
+# Render Style A, B, and C for one song.
 # Usage: ./scripts/render_both.sh "04 - Whale Song.wav"
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -13,3 +13,4 @@ fi
 PYTHON="${PYTHON:-.venv/bin/python3}"
 "$PYTHON" scripts/render_song.py "$SONG" a
 "$PYTHON" scripts/render_song.py "$SONG" b
+"$PYTHON" scripts/render_song.py "$SONG" c

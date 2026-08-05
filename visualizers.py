@@ -390,6 +390,51 @@ def pick_accent_color(rng: random.Random) -> tuple[int, int, int]:
     return color
 
 
+def make_solid_pulse_background_clip(
+    color: tuple[int, int, int],
+    mono: np.ndarray,
+    global_max_rms: float,
+    duration: float,
+    canvas_size: tuple[int, int],
+):
+    """Solid canvas with gentle RMS brightness pulse (Style C)."""
+    from art.palette import assert_not_tan
+
+    assert_not_tan(color, context="solid bg")
+    base = Image.new("RGB", canvas_size, color)
+
+    def make_frame(t):
+        energy = _energy_at(t, mono, global_max_rms)
+        framed = ImageEnhance.Brightness(base).enhance(1.0 + energy * 0.1)
+        framed = ImageEnhance.Color(framed).enhance(1.0 + energy * 0.08)
+        return np.array(framed)
+
+    return VideoClip(make_frame, duration=duration)
+
+
+def build_hard_cut_card_sequence(
+    cards: list[Image.Image],
+    mono: np.ndarray,
+    global_max_rms: float,
+    total_duration: float,
+    *,
+    min_gap: float = CUT_MIN_GAP,
+):
+    """Hard-cut between Now Playing card stills on musical peaks (Style C)."""
+    n = len(cards)
+    if n == 0:
+        raise ValueError("No cards to animate")
+
+    cut_times = detect_cut_times(mono, global_max_rms, total_duration, min_gap=min_gap)
+    print(f"  Card cuts: {len(cut_times)} peak-driven hard cuts")
+    frames = [np.array(c.convert("RGB")) for c in cards]
+
+    def make_frame(t):
+        return frames[_still_index_at(t, cut_times) % n]
+
+    return VideoClip(make_frame, duration=total_duration)
+
+
 def build_art_sequence(
     stills: list[Image.Image],
     mono: np.ndarray,

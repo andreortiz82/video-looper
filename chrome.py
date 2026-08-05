@@ -1,4 +1,4 @@
-"""Now Playing cards, logos, and text chrome for Style A / Style B."""
+"""Now Playing cards, logos, and text chrome for Style A / B / C."""
 
 from __future__ import annotations
 
@@ -24,14 +24,16 @@ LOGO_PATH = os.path.join(os.path.dirname(__file__), "assets", "rasanova-logo.svg
 FONT_BOLD = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
 FONT_REG = "/System/Library/Fonts/Supplemental/Arial.ttf"
 
-# Shared NP card geometry on 1080×1920 — meta bar identical across Style A / B
+# Shared NP card geometry on 1080×1920 — meta bar identical across styles
 NP_WIDTH = 720
 META_H = 180
 TITLE_SIZE = 44
 DATE_SIZE = 28
 TITLE_DATE_GAP = 24
-COVER_INSET_B = 28
-COVER_SIZE_B = META_H - 2 * COVER_INSET_B  # fills meta bar with equal inset
+META_INSET = 28
+META_THUMB = META_H - 2 * META_INSET  # cover (B) or logo (C) in meta row
+COVER_INSET_B = META_INSET
+COVER_SIZE_B = META_THUMB
 LOGO_TOP_A = 96
 LOGO_SIZE_A = 168
 CARD_GAP_A = 48
@@ -88,11 +90,10 @@ def _draw_meta_text(
     *,
     align: str = "center",
 ) -> None:
-    """Shared title/date typography for Style A and Style B meta bars."""
+    """Shared title/date typography for Style A / B / C meta bars."""
     x0, y0, x1, y1 = box
     title_font = _font(FONT_BOLD, TITLE_SIZE)
     date_font = _font(FONT_REG, DATE_SIZE)
-    # Truncate long titles
     max_w = x1 - x0 - 24
     while title and title_font.getlength(title) > max_w and len(title) > 3:
         title = title[:-2] + "…"
@@ -152,14 +153,48 @@ def build_style_b_card(
     draw = ImageDraw.Draw(card)
     draw.rectangle([0, meta_y, width, h], fill=SLATE)
 
-    thumb = cover.convert("RGB").resize((COVER_SIZE_B, COVER_SIZE_B), Image.Resampling.LANCZOS)
-    thumb_y = meta_y + (META_H - COVER_SIZE_B) // 2
-    card.paste(thumb, (COVER_INSET_B, thumb_y))
+    thumb = cover.convert("RGB").resize((META_THUMB, META_THUMB), Image.Resampling.LANCZOS)
+    thumb_y = meta_y + (META_H - META_THUMB) // 2
+    card.paste(thumb, (META_INSET, thumb_y))
 
-    text_x0 = COVER_INSET_B + COVER_SIZE_B + 24
+    text_x0 = META_INSET + META_THUMB + 24
     _draw_meta_text(
         draw,
-        (text_x0, meta_y, width - COVER_INSET_B, h),
+        (text_x0, meta_y, width - META_INSET, h),
+        title,
+        date,
+        align="left",
+    )
+    return card
+
+
+def build_style_c_card(
+    kaleido: Image.Image,
+    title: str,
+    date: str,
+    logo_bg: tuple[int, int, int],
+    *,
+    width: int = NP_WIDTH,
+) -> Image.Image:
+    """Kaleidoscope art + logo/meta row — Style C Now Playing face (no border)."""
+    assert_not_tan(logo_bg, context="style C logo bg")
+    art = kaleido.convert("RGB").resize((width, width), Image.Resampling.LANCZOS)
+    h = width + META_H
+    card = Image.new("RGB", (width, h), SLATE)
+    card.paste(art, (0, 0))
+
+    meta_y = width
+    draw = ImageDraw.Draw(card)
+    draw.rectangle([0, meta_y, width, h], fill=SLATE)
+
+    logo = logo_image(META_THUMB, bg=logo_bg)
+    logo_y = meta_y + (META_H - META_THUMB) // 2
+    card.paste(logo, (META_INSET, logo_y))
+
+    text_x0 = META_INSET + META_THUMB + 24
+    _draw_meta_text(
+        draw,
+        (text_x0, meta_y, width - META_INSET, h),
         title,
         date,
         align="left",
@@ -197,7 +232,6 @@ def layout_style_a(
     card_w, card_h = card.size
     card_x = (cw - card_w) // 2
     card_y = logo_y + LOGO_SIZE_A + CARD_GAP_A
-    # Keep card visually centered if vertical room allows
     ideal_y = (ch - card_h) // 2
     if ideal_y > card_y:
         card_y = ideal_y
@@ -220,6 +254,7 @@ def layout_style_b(
     duration: float,
     canvas_size: tuple[int, int] = (1080, 1920),
 ) -> ChromeLayout:
+    """Centered Now Playing card (Style B and Style C)."""
     cw, ch = canvas_size
     card_w, card_h = card.size
     card_x = (cw - card_w) // 2
@@ -234,3 +269,6 @@ def layout_style_b(
         card_h=card_h,
         card_clip=_image_clip(card, duration),
     )
+
+
+layout_style_c = layout_style_b

@@ -2,23 +2,22 @@ import os
 import sys
 
 from art.stills import seed_from_song
-from render import AUDIO_DIR, LAYOUT_A, LAYOUT_B, LAYOUT_CLASSIC, LAYOUT_STYLES, RenderOptions, render
+from render import AUDIO_DIR, LAYOUT_A, LAYOUT_B, LAYOUT_C, LAYOUT_STYLES, RenderOptions, render
 
 LAYOUT_ALIASES = {
     "a": LAYOUT_A,
     "b": LAYOUT_B,
-    "classic": LAYOUT_CLASSIC,
-    "c": LAYOUT_CLASSIC,
+    "c": LAYOUT_C,
 }
 
 
 def main():
-    layout_style = LAYOUT_CLASSIC
+    layout_style = LAYOUT_A
     if len(sys.argv) > 1:
         key = sys.argv[1].strip().lower()
         layout_style = LAYOUT_ALIASES.get(key, key)
         if layout_style not in LAYOUT_STYLES:
-            raise SystemExit(f"Usage: video_bus.py [a|b|classic]  (got {sys.argv[1]!r})")
+            raise SystemExit(f"Usage: video_bus.py [a|b|c]  (got {sys.argv[1]!r})")
 
     audio_files = sorted(
         f for f in os.listdir(AUDIO_DIR) if f.lower().endswith((".mp3", ".wav", ".aac", ".m4a"))
