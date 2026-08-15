@@ -1,8 +1,6 @@
 # video-looper
 
-Generates unique brand-palette **YouTube / Instagram Shorts** (1080×1920) for a song.
-
-Three Now Playing layouts: **Style A** (spiral), **Style B** (mosaic), **Style C** (kaleidoscope on solid color).
+Unified offline renderer for Rasa Nova music visuals. Generates brand-palette artwork (or samples optional video), animates it to audio, and exports **Style A / B / C** layouts at **9:16**, **1:1**, or **16:9**.
 
 ## Previews
 
@@ -26,16 +24,15 @@ Needs **FFmpeg** on your PATH (MoviePy uses it).
 
 ## Input
 
-Drop songs in `audio/`:
-
-- Formats: `.mp3`, `.wav`, `.aac`, `.m4a`
+- **Audio (required):** drop songs in `audio/` (`.mp3`, `.wav`, `.aac`, `.m4a`)
+- **Video (optional):** drop clips in `video/` or pass `--video path` — used as Style A/B backgrounds and Style C kaleidoscope source
 - Media files are gitignored — keep them local only
 
-Artwork is generated per song (no `video/` source clips).
+Default art path generates stills per song. With `--video`, frames are sampled across the same audio window (`--start` / `--duration` / `--clip-seed`).
 
 ## Quick start
 
-**Interactive (pick song + layout):**
+**Interactive (song + layout + aspect + optional video):**
 
 ```bash
 .venv/bin/python3 loop_video.py
@@ -45,41 +42,69 @@ Artwork is generated per song (no `video/` source clips).
 
 ```bash
 .venv/bin/python3 scripts/render_song.py "04 - Whale Song.wav" a
-.venv/bin/python3 scripts/render_song.py "04 - Whale Song.wav" b
-.venv/bin/python3 scripts/render_song.py "04 - Whale Song.wav" c
+.venv/bin/python3 scripts/render_song.py "04 - Whale Song.wav" b --aspect square
+.venv/bin/python3 scripts/render_song.py "04 - Whale Song.wav" c --aspect landscape
 ```
 
-**All three styles for one song:**
+**Aspect ratios:**
 
 ```bash
-chmod +x scripts/render_both.sh
-./scripts/render_both.sh "04 - Whale Song.wav"
+--aspect portrait    # 9:16 → 1080×1920 (default Shorts)
+--aspect square      # 1:1  → 1080×1080
+--aspect landscape   # 16:9 → 1920×1080
+# aliases: 9:16 | 1:1 | 16:9
 ```
 
-**Static preview PNGs (3 variants × Style A/B/C):**
+**Optional video source** (bg / kaleidoscope):
+
+```bash
+.venv/bin/python3 scripts/render_song.py "04 - Whale Song.wav" c --video clip.mp4
+.venv/bin/python3 scripts/render_song.py "04 - Whale Song.wav" a --video video/loop.mov --aspect square
+```
+
+**Clip control** (optional; defaults keep the seeded random 60s window):
+
+```bash
+.venv/bin/python3 scripts/render_song.py "04 - Whale Song.wav" a --start 92.5
+.venv/bin/python3 scripts/render_song.py "04 - Whale Song.wav" a --clip-seed 7
+.venv/bin/python3 scripts/render_song.py "04 - Whale Song.wav" b --start 30 --duration 45
+```
+
+**Art lock** (optional; match a picked preview still):
+
+```bash
+.venv/bin/python3 scripts/render_song.py "Big E.mp3" a --aspect square --seed 20260814
+.venv/bin/python3 scripts/render_song.py "Big E.mp3" a --aspect square --seed 20260814 --start 15 --cover eyes-stack.svg --still 3
+```
+
+`--seed` overrides the song-filename art seed. `--cover` locks the SVG template. `--still N` locks Style A to that 1-based preview variant (spiral + matching cover recolor).
+
+**Static preview PNGs:**
 
 ```bash
 .venv/bin/python3 scripts/make_previews.py "04 - Whale Song.wav"
-# → output/preview/<Song>_STYLE_A_bg1_….png … STYLE_C_v3_….png
-# Style A/B variants each use a distinct cover template for review diversity.
+.venv/bin/python3 scripts/make_previews.py "04 - Whale Song.wav" --aspect square
+.venv/bin/python3 scripts/make_previews.py "Big E.mp3" --style a --seed 20260814 --aspect square
+.venv/bin/python3 scripts/make_previews.py "04 - Whale Song.wav" --aspect landscape --video clip.mp4
 ```
+
+`--style a|b|c` (comma-separated) writes a subset. `--seed` rolls new artwork.
 
 **Batch every file in `audio/`:**
 
 ```bash
 .venv/bin/python3 video_bus.py a
-.venv/bin/python3 video_bus.py b
-.venv/bin/python3 video_bus.py c
+.venv/bin/python3 video_bus.py c square
 ```
 
 ## Example scripts
 
 | Script | What it does |
 |--------|----------------|
-| [`scripts/render_song.py`](scripts/render_song.py) | Render one MP4: `song` + `a\|b\|c` |
-| [`scripts/render_both.sh`](scripts/render_both.sh) | Render Style A, B, then C for one song |
-| [`scripts/make_previews.py`](scripts/make_previews.py) | Write 9 static review PNGs (A×3, B×3, C×3; distinct covers on A/B) |
-| [`loop_video.py`](loop_video.py) | Interactive song + layout picker |
+| [`scripts/render_song.py`](scripts/render_song.py) | Render one MP4: `song` + `a\|b\|c` + `--aspect` / `--video` / clip / `--seed` / `--cover` / `--still` |
+| [`scripts/render_both.sh`](scripts/render_both.sh) | Render Style A, B, then C for one song (extra flags forwarded) |
+| [`scripts/make_previews.py`](scripts/make_previews.py) | Write static review PNGs; `--style` / `--seed` / `--aspect` / `--video` |
+| [`loop_video.py`](loop_video.py) | Interactive song + layout + aspect + video picker |
 | [`video_bus.py`](video_bus.py) | Batch-render all songs in `audio/` |
 
 ### Library-style call
@@ -92,21 +117,33 @@ song_path = "audio/04 - Whale Song.wav"
 song_name = "04 - Whale Song"
 seed = seed_from_song(song_name)
 
-for style in ("a", "b", "c"):
-    render(song_path, song_name, RenderOptions(master_seed=seed, layout_style=style))
+render(
+    song_path,
+    song_name,
+    RenderOptions(
+        master_seed=20260814,          # or seed_from_song(song_name)
+        layout_style="a",
+        aspect="square",
+        video_path="video/loop.mp4",  # optional
+        audio_start=15,
+        audio_duration=60,
+        cover_filename="eyes-stack.svg",
+        still_index=3,                 # Style A: lock preview variant
+    ),
+)
 ```
 
 ## Layout styles
 
 | Style | Background | Chrome |
 |-------|------------|--------|
-| **A** | Off-center wavy spiral; rotates + zooms with RMS; 3 variants hard-cut on volume peaks | Centered logo + Now Playing card (generated cover over title/date); thick white pulsing border |
-| **B** | Mosaic on brand palette; zooms with RMS; 3 variants hard-cut on volume peaks | Now Playing card: large logo on random accent + cover/meta row; thick white pulsing border |
-| **C** | Solid randomized accent color; pulses with RMS | Now Playing card: kaleidoscope art (3 variants, peak cuts) + logo (random accent) beside title/date; thick white pulsing border |
+| **A** | Generated spiral (or video frames); rotates + zooms with RMS; 3 variants hard-cut on peaks | Centered logo + Now Playing card (cover over title/date); thick white pulsing border |
+| **B** | Generated mosaic (or video frames); zooms with RMS; 3 variants hard-cut on peaks | Now Playing card: large logo on accent + cover/meta row; thick white pulsing border |
+| **C** | Solid randomized accent; pulses with RMS | Kaleidoscope card art from **generated stills or video frames** (polar N-fold sampler) + logo/meta; peak cuts |
 
-Shared meta bar (title + date): **180px** tall, same fonts/spacing across A / B / C.
+Chrome geometry scales to the chosen aspect (card width, meta bar, fonts, logo).
 
-Covers are recolored from `assets/covers/base/*.svg` (8 templates). Full MP4 renders lock **one cover per song** (seeded). Preview batches force **three distinct templates** on Style A/B so review shows more of the set. Style C uses kaleidoscope art instead of a cover. **Tan `#F0E6D0` is eye sclera only** — never used as background or non-eye fill.
+Covers are recolored from `assets/covers/base/*.svg`. Full MP4s lock **one cover per song** unless `--cover` is set. Preview batches force **three distinct templates** on Style A/B. **Tan `#F0E6D0` is eye sclera only**.
 
 ## Brand palette
 
@@ -123,16 +160,15 @@ Covers are recolored from `assets/covers/base/*.svg` (8 templates). Full MP4 ren
 | White | `#FFFFFF` | Background / fill / border |
 | Tan | `#F0E6D0` | **Eye sclera only** |
 
-## Generators
+## Generators / effects
 
 | Name | Description |
 |------|-------------|
 | `spiral` | Wavy nested-square spiral (Style A backgrounds) |
 | `mosaic` | Geometric mosaic cell grid (Style B backgrounds) |
-| `kaleidoscope` | 4-fold mirror triangle grid (Style C card art) |
-| `kalenova` | Kaleidoscope × rasanova motifs |
-| `rasanova` | Flat pop-art eyes, stars, textures |
-| `mosaova` | Mosaic grid × rasanova eyes/starbursts |
+| `kaleidoscope` | Procedural 4-fold triangle grid (Style C source when no video) |
+| `kaleido_sampler` | Polar N-fold sampler over generated images **or** video frames |
+| `kalenova` / `rasanova` / `mosaova` | Vendored; not wired into the active render path yet |
 
 ## Project structure
 
@@ -140,18 +176,22 @@ Covers are recolored from `assets/covers/base/*.svg` (8 templates). Full MP4 ren
 video-looper/
 ├── assets/
 │   ├── rasanova-logo.svg
-│   └── covers/base/       # SVG cover templates
-├── docs/previews/         # README stills
+│   └── covers/base/
+├── docs/previews/
 ├── scripts/
 │   ├── render_song.py
 │   ├── render_both.sh
 │   └── make_previews.py
 ├── audio/                 # Input songs (gitignored)
-├── art/                   # Generators, covers, palette
-├── chrome.py              # Now Playing cards + logo
-├── visualizers.py         # Motion, peak cuts, borders
-├── layout.py
-├── render.py              # Pipeline + preview writer
+├── video/                 # Optional video sources (gitignored)
+├── art/
+│   ├── generators/
+│   └── kaleido_sampler.py
+├── chrome.py
+├── visualizers.py
+├── layout.py              # Aspect → canvas helpers
+├── video_source.py        # Frame sampling
+├── render.py
 ├── loop_video.py
 └── video_bus.py
 ```
@@ -159,13 +199,15 @@ video-looper/
 ## Output
 
 ```
-output/<Song>_SHORTS_STYLE_A_YYYYMMDD_HHMMSS.mp4
-output/<Song>_SHORTS_STYLE_B_YYYYMMDD_HHMMSS.mp4
-output/<Song>_SHORTS_STYLE_C_YYYYMMDD_HHMMSS.mp4
-output/preview/<Song>_STYLE_A_bg1_….png
+output/<Song>_9x16_STYLE_A_YYYYMMDD_HHMMSS.mp4
+output/<Song>_1x1_STYLE_C_YYYYMMDD_HHMMSS.mp4
+output/<Song>_16x9_STYLE_B_YYYYMMDD_HHMMSS.mp4
+output/preview/<Song>_9x16_STYLE_A_bg1_….png
 ```
 
-- Size: `1080×1920` (9:16)
-- Duration: up to 60 seconds (random window of the track)
+- Aspects: `1080×1920` / `1080×1080` / `1920×1080`
+- Duration: up to 60s by default; override with `--start` / `--duration`
 - Audio: **1s fade-in** and **1s fade-out** on the clipped window
-- Same filename → same seed (deterministic art + one cover); peak cuts follow that audio window
+- Same filename → same **master seed** unless `--seed` is set
+- Window uses the art seed unless `--clip-seed` or `--start` is set
+- `--cover` / `--still` lock the cover template and Style A variant to match a preview PNG

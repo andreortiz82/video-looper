@@ -1,7 +1,17 @@
+"""Batch-render every file in audio/ at one layout + aspect.
+
+Examples:
+  .venv/bin/python3 video_bus.py
+  .venv/bin/python3 video_bus.py a
+  .venv/bin/python3 video_bus.py c square
+  .venv/bin/python3 video_bus.py b landscape
+"""
+
 import os
 import sys
 
 from art.stills import seed_from_song
+from layout import normalize_aspect
 from render import AUDIO_DIR, LAYOUT_A, LAYOUT_B, LAYOUT_C, LAYOUT_STYLES, RenderOptions, render
 
 LAYOUT_ALIASES = {
@@ -13,11 +23,18 @@ LAYOUT_ALIASES = {
 
 def main():
     layout_style = LAYOUT_A
-    if len(sys.argv) > 1:
-        key = sys.argv[1].strip().lower()
+    aspect = "portrait"
+    args = sys.argv[1:]
+    if args:
+        key = args[0].strip().lower()
         layout_style = LAYOUT_ALIASES.get(key, key)
         if layout_style not in LAYOUT_STYLES:
-            raise SystemExit(f"Usage: video_bus.py [a|b|c]  (got {sys.argv[1]!r})")
+            raise SystemExit(f"Usage: video_bus.py [a|b|c] [portrait|square|landscape]")
+    if len(args) > 1:
+        try:
+            aspect = normalize_aspect(args[1])
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
 
     audio_files = sorted(
         f for f in os.listdir(AUDIO_DIR) if f.lower().endswith((".mp3", ".wav", ".aac", ".m4a"))
@@ -27,7 +44,7 @@ def main():
 
     print(
         f"Found {len(audio_files)} audio file(s). "
-        f"Rendering Shorts layout={layout_style} (9:16, 60s)...\n"
+        f"Rendering layout={layout_style} aspect={aspect} (60s window)...\n"
     )
 
     results = []
@@ -38,7 +55,7 @@ def main():
         output = render(
             song_path,
             song_name,
-            RenderOptions(master_seed=seed, layout_style=layout_style),
+            RenderOptions(master_seed=seed, layout_style=layout_style, aspect=aspect),
         )
         results.append(output)
 

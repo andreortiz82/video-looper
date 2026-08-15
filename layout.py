@@ -1,3 +1,7 @@
+"""Canvas aspect helpers and legacy layout utilities."""
+
+from __future__ import annotations
+
 import io
 import os
 from dataclasses import dataclass
@@ -13,8 +17,31 @@ import numpy as np
 from moviepy import ImageClip
 from PIL import Image
 
+# Default Shorts canvas (9:16). Prefer canvas_for_aspect() for new code.
 CANVAS = (1080, 1920)
 ART_SCALE = 0.72
+
+ASPECT_PORTRAIT = "portrait"
+ASPECT_SQUARE = "square"
+ASPECT_LANDSCAPE = "landscape"
+ASPECTS = (ASPECT_PORTRAIT, ASPECT_SQUARE, ASPECT_LANDSCAPE)
+
+# Named aspects → (width, height). Long edge 1920 for landscape; short edge 1080.
+ASPECT_SIZES: dict[str, tuple[int, int]] = {
+    ASPECT_PORTRAIT: (1080, 1920),  # 9:16
+    ASPECT_SQUARE: (1080, 1080),  # 1:1
+    ASPECT_LANDSCAPE: (1920, 1080),  # 16:9
+}
+
+ASPECT_ALIASES = {
+    "portrait": ASPECT_PORTRAIT,
+    "9:16": ASPECT_PORTRAIT,
+    "shorts": ASPECT_PORTRAIT,
+    "square": ASPECT_SQUARE,
+    "1:1": ASPECT_SQUARE,
+    "landscape": ASPECT_LANDSCAPE,
+    "16:9": ASPECT_LANDSCAPE,
+}
 
 LOGO_PATH = os.path.join(os.path.dirname(__file__), "assets", "rasanova-logo.svg")
 LOGO_OPACITY = 0.92
@@ -22,6 +49,34 @@ LOGO_WIDTH = 140
 LOGO_INSET = 32
 LOGO_GAP = 16
 BOTTOM_MARGIN = 48
+
+
+def normalize_aspect(aspect: str | None) -> str:
+    if aspect is None:
+        return ASPECT_PORTRAIT
+    key = aspect.strip().lower()
+    if key not in ASPECT_ALIASES:
+        raise ValueError(
+            f"Unknown aspect {aspect!r}; expected one of "
+            f"{ASPECT_PORTRAIT}, {ASPECT_SQUARE}, {ASPECT_LANDSCAPE} "
+            f"(or 9:16 / 1:1 / 16:9)"
+        )
+    return ASPECT_ALIASES[key]
+
+
+def canvas_for_aspect(aspect: str | None = None) -> tuple[int, int]:
+    name = normalize_aspect(aspect)
+    return ASPECT_SIZES[name]
+
+
+def aspect_tag(aspect: str | None = None) -> str:
+    """Short label for output filenames."""
+    name = normalize_aspect(aspect)
+    return {
+        ASPECT_PORTRAIT: "9x16",
+        ASPECT_SQUARE: "1x1",
+        ASPECT_LANDSCAPE: "16x9",
+    }[name]
 
 
 def target_art_size(canvas_size: tuple[int, int] = CANVAS) -> int:
