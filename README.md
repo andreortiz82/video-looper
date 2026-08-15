@@ -4,12 +4,27 @@ Unified offline renderer for Rasa Nova music visuals. Generates brand-palette ar
 
 ## Previews
 
-| Style A — spiral + cover | Style B — mosaic + logo | Style C — solid + kaleidoscope |
-|:---:|:---:|:---:|
-| ![Style A](docs/previews/style-a.png) | ![Style B](docs/previews/style-b.png) | ![Style C](docs/previews/style-c.png) |
-| ![Style A alt](docs/previews/style-a-alt.png) | ![Style B alt](docs/previews/style-b-alt.png) | ![Style C alt](docs/previews/style-c-alt.png) |
+Same song (*Big E*) and art seed across the grid. Chrome scales with the canvas. Videos zoom/pulse to the music and hard-cut art variants on volume peaks. Audio fades 1s in/out.
 
-Top row: *Whale Song*. Bottom row: *Space Cowboy*. Videos zoom/pulse to the music and hard-cut art variants on volume peaks. Audio fades 1s in/out.
+**Style A** — spiral + cover &nbsp;·&nbsp; **Style B** — mosaic + logo &nbsp;·&nbsp; **Style C** — solid + kaleidoscope
+
+### Portrait 9:16 — 1080×1920
+
+| Style A | Style B | Style C |
+|:---:|:---:|:---:|
+| <img src="docs/previews/a-9x16.png" alt="Style A portrait 9:16" width="200"> | <img src="docs/previews/b-9x16.png" alt="Style B portrait 9:16" width="200"> | <img src="docs/previews/c-9x16.png" alt="Style C portrait 9:16" width="200"> |
+
+### Square 1:1 — 1080×1080
+
+| Style A | Style B | Style C |
+|:---:|:---:|:---:|
+| <img src="docs/previews/a-1x1.png" alt="Style A square 1:1" width="240"> | <img src="docs/previews/b-1x1.png" alt="Style B square 1:1" width="240"> | <img src="docs/previews/c-1x1.png" alt="Style C square 1:1" width="240"> |
+
+### Landscape 16:9 — 1920×1080
+
+| Style A | Style B | Style C |
+|:---:|:---:|:---:|
+| <img src="docs/previews/a-16x9.png" alt="Style A landscape 16:9" width="320"> | <img src="docs/previews/b-16x9.png" alt="Style B landscape 16:9" width="320"> | <img src="docs/previews/c-16x9.png" alt="Style C landscape 16:9" width="320"> |
 
 ## Setup
 
