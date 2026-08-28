@@ -5,7 +5,6 @@ from __future__ import annotations
 import io
 import os
 from dataclasses import dataclass
-from datetime import datetime
 
 try:
     import cairosvg
@@ -19,6 +18,7 @@ from moviepy import ImageClip
 from PIL import Image, ImageDraw, ImageFont
 
 from art.palette import SLATE, WHITE, assert_not_tan
+from session_date import format_song_date as resolve_song_date
 
 LOGO_PATH = os.path.join(os.path.dirname(__file__), "assets", "rasanova-logo.svg")
 FONT_BOLD = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
@@ -139,13 +139,8 @@ def _font(path: str, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
 
 
 def format_song_date(song_path: str | None = None, override: str | None = None) -> str:
-    if override:
-        return override
-    if song_path and os.path.isfile(song_path):
-        dt = datetime.fromtimestamp(os.path.getmtime(song_path))
-    else:
-        dt = datetime.now()
-    return f"{dt:%b} {dt.day}, {dt.year}"
+    """On-screen chrome date from session folder / filename, not render time."""
+    return resolve_song_date(song_path, override)
 
 
 def display_title(song_name: str) -> str:

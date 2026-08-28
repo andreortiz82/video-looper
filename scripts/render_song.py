@@ -9,6 +9,8 @@ Examples:
   .venv/bin/python3 scripts/render_song.py "04 - Whale Song.wav" a --clip-seed 7
   .venv/bin/python3 scripts/render_song.py "04 - Whale Song.wav" b --start 30 --duration 45
   .venv/bin/python3 scripts/render_song.py "Big E.mp3" a --aspect square --seed 20260814 --start 15 --cover eyes-stack.svg --still 3
+  .venv/bin/python3 scripts/render_song.py "audio/First Time KC May 16 2026/A Funny Handshake May 16 2026.mp3" a
+  .venv/bin/python3 scripts/render_song.py "A Funny Handshake May 16 2026.mp3" a --date "May 16, 2026"
 """
 
 from __future__ import annotations
@@ -89,6 +91,16 @@ def _parse_args() -> argparse.Namespace:
         dest="still_index",
         help="1-based preview variant to lock (Style A spiral + matching cover recolor)",
     )
+    parser.add_argument(
+        "--date",
+        default=None,
+        metavar="DATE",
+        dest="song_date",
+        help=(
+            "On-screen chrome date (e.g. 'May 16, 2026'). "
+            "Default: session folder name, then audio filename, then file timestamp — not render time."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -118,10 +130,13 @@ def main() -> None:
         except FileNotFoundError as exc:
             raise SystemExit(str(exc)) from exc
 
-    song_path = args.audio_file if os.path.isabs(args.audio_file) else args.audio_file
+    song_path = args.audio_file
     if not os.path.isfile(song_path):
+        nested = os.path.join("audio", args.audio_file)
         candidate = os.path.join("audio", os.path.basename(args.audio_file))
-        if os.path.isfile(candidate):
+        if os.path.isfile(nested):
+            song_path = nested
+        elif os.path.isfile(candidate):
             song_path = candidate
         else:
             raise SystemExit(f"Audio not found: {args.audio_file}")
@@ -152,6 +167,7 @@ def main() -> None:
             clip_seed=args.clip_seed,
             cover_filename=args.cover,
             still_index=args.still_index,
+            song_date=args.song_date,
         ),
     )
     print(f"\nDone — {out}")

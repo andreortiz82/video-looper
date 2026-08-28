@@ -39,7 +39,7 @@ Needs **FFmpeg** on your PATH (MoviePy uses it).
 
 ## Input
 
-- **Audio (required):** drop songs in `audio/` (`.mp3`, `.wav`, `.aac`, `.m4a`)
+- **Audio (required):** drop songs in `audio/` (`.mp3`, `.wav`, `.aac`, `.m4a`). Session subfolders (Drive-style names like `audio/First Time KC May 16 2026/`) set the on-screen chrome date.
 - **Video (optional):** drop clips in `video/` or pass `--video path` — used as Style A/B backgrounds and Style C kaleidoscope source
 - Media files are gitignored — keep them local only
 
@@ -94,6 +94,15 @@ Default art path generates stills per song. With `--video`, frames are sampled a
 
 `--seed` overrides the song-filename art seed. `--cover` locks the SVG template. `--still N` locks Style A to that 1-based preview variant (spiral + matching cover recolor).
 
+**On-screen date** (under the song title — not the MP4 filename stamp):
+
+```bash
+.venv/bin/python3 scripts/render_song.py "audio/First Time KC May 16 2026/song.mp3" a
+.venv/bin/python3 scripts/render_song.py "song.mp3" a --date "May 16, 2026"
+```
+
+Chrome uses, in order: `--date`, the audio file's parent folder name (Drive session folders like `First Time KC May 16 2026`), the filename itself, then the file's birthtime/mtime. It does **not** use the render date when a file exists. Output filenames still use render-time `%Y%m%d_%H%M%S`.
+
 **Static preview PNGs:**
 
 ```bash
@@ -116,7 +125,7 @@ Default art path generates stills per song. With `--video`, frames are sampled a
 
 | Script | What it does |
 |--------|----------------|
-| [`scripts/render_song.py`](scripts/render_song.py) | Render one MP4: `song` + `a\|b\|c` + `--aspect` / `--video` / clip / `--seed` / `--cover` / `--still` |
+| [`scripts/render_song.py`](scripts/render_song.py) | Render one MP4: `song` + `a\|b\|c` + `--aspect` / `--video` / clip / `--seed` / `--cover` / `--still` / `--date` |
 | [`scripts/render_both.sh`](scripts/render_both.sh) | Render Style A, B, then C for one song (extra flags forwarded) |
 | [`scripts/make_previews.py`](scripts/make_previews.py) | Write static review PNGs; `--style` / `--seed` / `--aspect` / `--video` |
 | [`loop_video.py`](loop_video.py) | Interactive song + layout + aspect + video picker |
@@ -144,6 +153,7 @@ render(
         audio_duration=60,
         cover_filename="eyes-stack.svg",
         still_index=3,                 # Style A: lock preview variant
+        song_date="May 16, 2026",      # optional chrome date; default from folder/filename
     ),
 )
 ```
@@ -203,6 +213,9 @@ video-looper/
 │   ├── generators/
 │   └── kaleido_sampler.py
 ├── chrome.py
+├── session_date.py        # On-screen chrome date from session folder / filename
+├── tests/
+│   └── test_session_date.py
 ├── visualizers.py
 ├── layout.py              # Aspect → canvas helpers
 ├── video_source.py        # Frame sampling
