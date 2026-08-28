@@ -81,6 +81,10 @@ def _init_widget(key: str, value) -> None:
         st.session_state[key] = value
 
 
+def _roll_seed(iid: str) -> None:
+    st.session_state[f"seed_{iid}"] = random.randint(1, 2_147_483_647)
+
+
 def _sync_item_from_widgets(item: dict, iid: str) -> None:
     item["style"] = style_letter(
         st.session_state.get(f"style_{iid}"), item.get("style") or "a"
@@ -170,11 +174,7 @@ with st.sidebar:
         with seed_col:
             st.number_input("Art Seed", step=1, key=f"seed_{iid}")
         with roll_col:
-            if st.button("ROLL", width="stretch"):
-                st.session_state[f"seed_{iid}"] = random.randint(1, 2_147_483_647)
-                _sync_item_from_widgets(item, iid)
-                save_queue(queue)
-                st.rerun()
+            st.button("ROLL", width="stretch", on_click=_roll_seed, args=(iid,))
 
         preview_clicked = st.button("Render Preview Stills", width="stretch")
 
