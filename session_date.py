@@ -97,6 +97,20 @@ def parse_session_date(text: str | None) -> datetime | None:
     return None
 
 
+def strip_session_date(text: str | None) -> str:
+    """Remove an embedded session date from a folder or file stem.
+
+    ``A Funny Handshake May 16 2026`` → ``A Funny Handshake``.
+    """
+    if not text:
+        return ""
+    match = _DATE_RE.search(text)
+    if not match:
+        return text.strip()
+    cleaned = f"{text[: match.start()]} {text[match.end() :]}"
+    return re.sub(r"[\s._\-]+", " ", cleaned).strip(" -_.,")
+
+
 def _date_from_audio_path(song_path: str) -> datetime | None:
     parent = os.path.basename(os.path.dirname(song_path.rstrip(os.sep)))
     if parent not in ("", ".", ".."):
