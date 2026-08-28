@@ -1,4 +1,5 @@
 # media (do not commit) — includes nested audio/<session>/ downloads
+# and duration-locked GUI preview clips under output/audio-preview/
 audio/**
 !audio/.gitkeep
 output/**

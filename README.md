@@ -50,6 +50,7 @@ One Streamlit app for the Instagram/video queue. Local browser only — not Stre
 - **Sidebar** (top to bottom): Data source → Song details → Visual settings and preview → Timing → Final actions
 - **Scan Google Drive** lists session folders (`1n3PMQwCVkMNiBo6FagsmjImJPNUovuhc`), keeps the newest take per title, and **appends** songs that are not already in the queue (existing order is unchanged)
 - **Choose Song** in the sidebar drives display name, date, style A/B/C, aspect, art seed, start, and duration for that row
+- **Timing** start + duration lock the sidebar audio player to that clip window (start `0` plays from the beginning of the file; render still uses a seeded random window when start is 0)
 - **Render Preview Stills** writes Style stills via `write_layout_previews` and sets status to `previewed` — it does **not** mark done
 - **Render Video** uses the same settings through `render()` / `RenderOptions`. Use **Mark Done** when you want `done`
 - Audio is downloaded on demand into `audio/<session folder>/` so chrome dates parse from the parent folder (`session_date.py`)
