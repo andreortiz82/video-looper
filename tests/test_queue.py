@@ -19,7 +19,9 @@ from song_queue import (
     newest_take_per_title,
     normalize_item,
     save_queue,
+    start_or_none,
     status_after_preview,
+    style_letter,
     title_from_filename,
 )
 
@@ -108,6 +110,21 @@ class StatusTests(unittest.TestCase):
         self.assertEqual(status_after_preview(STATUS_PREVIEWED), STATUS_PREVIEWED)
         self.assertEqual(status_after_preview(STATUS_DONE), STATUS_DONE)
         self.assertNotEqual(status_after_preview(STATUS_QUEUED), STATUS_DONE)
+
+
+class SidebarValueTests(unittest.TestCase):
+    def test_style_letter_normalizes_toggle_labels(self) -> None:
+        self.assertEqual(style_letter("A"), "a")
+        self.assertEqual(style_letter("b"), "b")
+        self.assertEqual(style_letter("nope", "c"), "c")
+
+    def test_zero_or_empty_start_means_seeded_window(self) -> None:
+        self.assertIsNone(start_or_none(None))
+        self.assertIsNone(start_or_none(""))
+        self.assertIsNone(start_or_none(0))
+        self.assertIsNone(start_or_none(0.0))
+        self.assertEqual(start_or_none(12.5), 12.5)
+        self.assertEqual(start_or_none("30"), 30.0)
 
 
 class QueueFileTests(unittest.TestCase):

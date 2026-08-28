@@ -79,6 +79,21 @@ def status_after_preview(status: str | None) -> str:
     return STATUS_PREVIEWED
 
 
+def style_letter(value: Any, fallback: str = DEFAULT_STYLE) -> str:
+    letter = str(value or fallback).strip().lower()
+    return letter if letter in ("a", "b", "c") else fallback
+
+
+def start_or_none(value: Any) -> float | None:
+    """Empty or 0 → None so render uses the seeded window, not an explicit in-point."""
+    if value is None or value == "":
+        return None
+    start = _as_float(value)
+    if start is None or start == 0:
+        return None
+    return start
+
+
 def _as_float(value: Any) -> float | None:
     if value is None or value == "":
         return None

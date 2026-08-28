@@ -46,11 +46,12 @@ One Streamlit app for the Instagram/video queue. Local browser only — not Stre
 .venv/bin/streamlit run app.py
 ```
 
-- **Queue table** in the main pane (status: `queued` / `previewed` / `done` / `failed`)
-- **Sidebar:** scan Google Drive, then style / aspect / seed / display name / date / 60s segment for the selected row
-- **Scan** lists session folders in Drive (`1n3PMQwCVkMNiBo6FagsmjImJPNUovuhc`), keeps the newest take per title, and **appends** songs that are not already in the queue (existing order is unchanged)
-- **Preview** writes Style stills via `write_layout_previews` and sets status to `previewed` — it does **not** mark done
-- **Render MP4** uses the same settings through `render()` / `RenderOptions`. Check *Mark done if MP4 render succeeds* (or hit **Mark done**) when you want `done`
+- **Queue table** and preview stills in the main pane (status: `queued` / `previewed` / `done` / `failed`)
+- **Sidebar** (top to bottom): Data source → Song details → Visual settings and preview → Timing → Final actions
+- **Scan Google Drive** lists session folders (`1n3PMQwCVkMNiBo6FagsmjImJPNUovuhc`), keeps the newest take per title, and **appends** songs that are not already in the queue (existing order is unchanged)
+- **Choose Song** in the sidebar drives display name, date, style A/B/C, aspect, art seed, start, and duration for that row
+- **Render Preview Stills** writes Style stills via `write_layout_previews` and sets status to `previewed` — it does **not** mark done
+- **Render Video** uses the same settings through `render()` / `RenderOptions`. Use **Mark Done** when you want `done`
 - Audio is downloaded on demand into `audio/<session folder>/` so chrome dates parse from the parent folder (`session_date.py`)
 
 Set `PUBLIC_GOOGLE_API_KEY` in a local `.env` (gitignored). Drive requests send Referer `https://rasanova-band.web.app/` because the site key is referrer-restricted. **Never commit a key.**
