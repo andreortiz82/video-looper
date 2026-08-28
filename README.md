@@ -37,6 +37,26 @@ brew install cairo   # required by cairosvg (logo + covers)
 
 Needs **FFmpeg** on your PATH (MoviePy uses it).
 
+## Local GUI
+
+One Streamlit app for the Instagram/video queue. Local browser only — not Streamlit Cloud.
+
+```bash
+.venv/bin/pip install -r requirements.txt
+.venv/bin/streamlit run app.py
+```
+
+- **Queue table** in the main pane (status: `queued` / `previewed` / `done` / `failed`)
+- **Sidebar:** scan Google Drive, then style / aspect / seed / display name / date / 60s segment for the selected row
+- **Scan** lists session folders in Drive (`1n3PMQwCVkMNiBo6FagsmjImJPNUovuhc`), keeps the newest take per title, and **appends** songs that are not already in the queue (existing order is unchanged)
+- **Preview** writes Style stills via `write_layout_previews` and sets status to `previewed` — it does **not** mark done
+- **Render MP4** uses the same settings through `render()` / `RenderOptions`. Check *Mark done if MP4 render succeeds* (or hit **Mark done**) when you want `done`
+- Audio is downloaded on demand into `audio/<session folder>/` so chrome dates parse from the parent folder (`session_date.py`)
+
+Set `PUBLIC_GOOGLE_API_KEY` in a local `.env` (gitignored). Drive requests send Referer `https://rasanova-band.web.app/` because the site key is referrer-restricted. **Never commit a key.**
+
+Live queue is **`queue.json`** (gitignored). Copy [`queue.example.json`](queue.example.json) or let the GUI create it on first save. A leftover `instagram-queue.json` is read once if `queue.json` is missing, then rewritten to `queue.json`.
+
 ## Input
 
 - **Audio (required):** drop songs in `audio/` (`.mp3`, `.wav`, `.aac`, `.m4a`). Session subfolders (Drive-style names like `audio/First Time KC May 16 2026/`) set the on-screen chrome date.
@@ -52,6 +72,8 @@ Default art path generates stills per song. With `--video`, frames are sampled a
 ```bash
 .venv/bin/python3 loop_video.py
 ```
+
+Daily queue work is faster in the [local GUI](#local-gui) (`streamlit run app.py`).
 
 **One song, one style:**
 
@@ -125,6 +147,7 @@ Chrome uses, in order: `--date`, the audio file's parent folder name (Drive sess
 
 | Script | What it does |
 |--------|----------------|
+| [`app.py`](app.py) | Local Streamlit GUI: Drive scan, queue, preview stills, MP4 render |
 | [`scripts/render_song.py`](scripts/render_song.py) | Render one MP4: `song` + `a\|b\|c` + `--aspect` / `--video` / clip / `--seed` / `--cover` / `--still` / `--date` |
 | [`scripts/render_both.sh`](scripts/render_both.sh) | Render Style A, B, then C for one song (extra flags forwarded) |
 | [`scripts/make_previews.py`](scripts/make_previews.py) | Write static review PNGs; `--style` / `--seed` / `--aspect` / `--video` |
@@ -153,6 +176,7 @@ render(
         audio_duration=60,
         cover_filename="eyes-stack.svg",
         still_index=3,                 # Style A: lock preview variant
+        display_name="Gumbia",          # optional chrome title; default from filename
         song_date="May 16, 2026",      # optional chrome date; default from folder/filename
     ),
 )
@@ -212,10 +236,15 @@ video-looper/
 ├── art/
 │   ├── generators/
 │   └── kaleido_sampler.py
+├── app.py                 # Local Streamlit GUI (queue + Drive scan)
+├── song_queue.py          # queue.json load/save / unique-title merge
+├── drive.py               # Drive session scan + on-demand download
 ├── chrome.py
 ├── session_date.py        # On-screen chrome date from session folder / filename
 ├── tests/
-│   └── test_session_date.py
+│   ├── test_session_date.py
+│   └── test_queue.py
+├── queue.example.json     # Empty queue template
 ├── visualizers.py
 ├── layout.py              # Aspect → canvas helpers
 ├── video_source.py        # Frame sampling

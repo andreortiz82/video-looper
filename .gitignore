@@ -1,14 +1,15 @@
-# media (do not commit)
-audio/*.mp3
-audio/*.wav
-audio/*.aac
-audio/*.m4a
-audio/*.flac
-output/*.mp4
-output/*.mov
-output/**/*.png
+# media (do not commit) — includes nested audio/<session>/ downloads
+audio/**
+!audio/.gitkeep
+output/**
+!output/.gitkeep
 stills/*.png
 video/
+
+# live queue (status + Drive ids). Copy queue.example.json → queue.json
+queue.json
+instagram-queue.json
+queue.json.tmp
 
 # env
 .venv/

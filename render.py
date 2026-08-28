@@ -67,6 +67,7 @@ class RenderOptions:
     master_seed: int | None = None
     layout_style: str = LAYOUT_A
     song_date: str | None = None
+    display_name: str | None = None  # chrome title; default display_title(song_name)
     # Clip control — art uses master_seed; window uses clip_seed / audio_start
     audio_start: float | None = None  # seconds; None = seeded random
     audio_duration: float | None = None  # None → SHORTS_DURATION
@@ -76,6 +77,12 @@ class RenderOptions:
     video_path: str | None = None  # optional bg / kaleido source
     cover_filename: str | None = None  # lock cover SVG basename
     still_index: int | None = None  # 1-based preview variant; None = all
+
+
+def _chrome_title(song_name: str, options: RenderOptions | None = None) -> str:
+    if options and options.display_name and options.display_name.strip():
+        return options.display_name.strip()
+    return display_title(song_name)
 
 
 def _analyze_audio(audio_clip):
@@ -359,6 +366,7 @@ def write_layout_previews(
     *,
     master_seed: int | None = None,
     song_date: str | None = None,
+    display_name: str | None = None,
     aspect: str = ASPECT_PORTRAIT,
     video_path: str | None = None,
     styles: str | tuple[str, ...] | None = None,
@@ -376,7 +384,7 @@ def write_layout_previews(
     metrics = layout_metrics(canvas_size)
     os.makedirs(PREVIEW_DIR, exist_ok=True)
 
-    title = display_title(song_name)
+    title = display_name.strip() if display_name and display_name.strip() else display_title(song_name)
     date = format_song_date(song_path, song_date)
     need_covers = LAYOUT_A in wanted or LAYOUT_B in wanted
     ar = aspect_tag(aspect)
@@ -518,7 +526,7 @@ def _render_style_a(song_path: str, song_name: str, master_seed: int, options: R
         filename=options.cover_filename,
     )
 
-    title = display_title(song_name)
+    title = _chrome_title(song_name, options)
     date = format_song_date(song_path, options.song_date)
     card = build_style_a_card(cover.image, title, date, metrics=metrics)
     print(f"Cover: {cover.filename} | Border: white")
@@ -571,7 +579,7 @@ def _render_style_b(song_path: str, song_name: str, master_seed: int, options: R
     cover = generate_cover(random.Random(master_seed ^ 0xC0C0), size=NP_COVER_SIZE)
 
     logo_bg = pick_accent_color(random.Random(master_seed ^ 0xD00D))
-    title = display_title(song_name)
+    title = _chrome_title(song_name, options)
     date = format_song_date(song_path, options.song_date)
     card = build_style_b_card(cover.image, title, date, logo_bg, metrics=metrics)
     print(f"Cover: {cover.filename} | Logo bg: RGB{logo_bg} | Border: white")
@@ -619,7 +627,7 @@ def _render_style_c(song_path: str, song_name: str, master_seed: int, options: R
 
     canvas_color = pick_accent_color(random.Random(master_seed ^ 0xB6C010))
     logo_bg = pick_accent_color(random.Random(master_seed ^ 0xC0FFEE))
-    title = display_title(song_name)
+    title = _chrome_title(song_name, options)
     date = format_song_date(song_path, options.song_date)
     cards = [
         build_style_c_card(art, title, date, logo_bg, metrics=metrics) for art in kaleidos

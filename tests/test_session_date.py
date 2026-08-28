@@ -8,7 +8,7 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 
-from session_date import format_song_date, parse_session_date
+from session_date import format_song_date, parse_session_date, strip_session_date
 
 
 FOLDER_CASES = (
@@ -42,6 +42,13 @@ class ParseSessionDateTests(unittest.TestCase):
         self.assertIsNone(parse_session_date("audio"))
         self.assertIsNone(parse_session_date("Whale Song"))
         self.assertIsNone(parse_session_date(""))
+
+    def test_strip_embedded_date(self) -> None:
+        self.assertEqual(
+            strip_session_date("A Funny Handshake May 16 2026"),
+            "A Funny Handshake",
+        )
+        self.assertEqual(strip_session_date("Whale Song"), "Whale Song")
 
 
 class FormatSongDateTests(unittest.TestCase):
@@ -119,6 +126,12 @@ class CliWiringTests(unittest.TestCase):
         self.assertIn('"--date"', src)
         self.assertIn("song_date=args.song_date", src)
         self.assertIn("dest=\"song_date\"", src)
+
+    def test_render_options_wires_display_name(self) -> None:
+        src = Path("render.py").read_text(encoding="utf-8")
+        self.assertIn("display_name: str | None = None", src)
+        self.assertIn("def _chrome_title", src)
+        self.assertIn("display_name=item.get(\"title\")", Path("app.py").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
