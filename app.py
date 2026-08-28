@@ -113,7 +113,7 @@ with st.sidebar:
     st.header("Drive")
     if not api_key():
         st.warning("Set `PUBLIC_GOOGLE_API_KEY` in `.env` to scan / download.")
-    if st.button("Scan Google Drive", use_container_width=True):
+    if st.button("Scan Google Drive", width="stretch"):
         try:
             with st.spinner("Listing session folders…"):
                 tracks = list_session_tracks()
@@ -143,7 +143,7 @@ table_rows = [
     }
     for item in items
 ]
-st.dataframe(table_rows, hide_index=True, use_container_width=True)
+st.dataframe(table_rows, hide_index=True, width="stretch")
 
 labels = [f"{it['position'] + 1}. {it.get('title') or '(untitled)'}  ·  {it.get('status')}" for it in items]
 selected_idx = st.selectbox(
@@ -217,10 +217,10 @@ with st.sidebar:
     save_queue(queue)
 
     st.divider()
-    preview_clicked = st.button("Render preview stills", use_container_width=True)
+    preview_clicked = st.button("Render preview stills", width="stretch")
     mark_done_after = st.checkbox("Mark done if MP4 render succeeds", value=False)
-    render_clicked = st.button("Render MP4", use_container_width=True, type="primary")
-    if item.get("status") != STATUS_DONE and st.button("Mark done", use_container_width=True):
+    render_clicked = st.button("Render MP4", width="stretch", type="primary")
+    if item.get("status") != STATUS_DONE and st.button("Mark done", width="stretch"):
         item["status"] = STATUS_DONE
         save_queue(queue)
         st.rerun()
@@ -284,7 +284,7 @@ previews = _latest_previews(item)
 if previews:
     cols = st.columns(len(previews))
     for col, path in zip(cols, previews):
-        col.image(path, caption=os.path.basename(path), use_container_width=True)
+        col.image(path, caption=os.path.basename(path), width="stretch")
 else:
     st.caption("No stills in `output/preview/` for this song/style/aspect yet.")
 
