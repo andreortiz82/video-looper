@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import math
 import os
+import subprocess
 import tempfile
 import unittest
 import wave
@@ -39,24 +39,35 @@ def _write_segmented_wav(path: str, segments: list[tuple[float, float]], rate: i
         wav.writeframes(frames.tobytes())
 
 
-def _mono_samples(path: str) -> tuple[list[float], float]:
-    from moviepy import AudioFileClip
+def _probe_clip(path: str) -> tuple[float, float, float]:
+    """Return (duration, full RMS, first-0.4s RMS) via ffmpeg.
 
-    clip = AudioFileClip(path)
+    MoviePy's mp3 reader can report silence on short clips; the files themselves
+    are fine for HTML5 / ``st.audio``.
+    """
+    wav_path = f"{path}.check.wav"
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", path, "-ac", "1", wav_path],
+        check=True,
+        capture_output=True,
+    )
     try:
-        duration = float(clip.duration or 0.0)
-        arr = clip.to_soundarray(fps=22050)
+        with wave.open(wav_path) as wav:
+            rate = wav.getframerate()
+            nch = wav.getnchannels()
+            n = wav.getnframes()
+            data = np.frombuffer(wav.readframes(n), dtype=np.int16).astype(np.float64)
+            if nch > 1:
+                data = data.reshape(-1, nch).mean(axis=1)
+            data /= 32768.0
+        duration = n / rate if rate else 0.0
+        full = float(np.sqrt(np.mean(data**2))) if len(data) else 0.0
+        head = data[: max(1, int(0.4 * rate))]
+        head_rms = float(np.sqrt(np.mean(head**2))) if len(head) else 0.0
+        return duration, full, head_rms
     finally:
-        clip.close()
-    if arr.ndim > 1:
-        arr = arr.mean(axis=1)
-    return arr.tolist(), duration
-
-
-def _rms(samples: list[float]) -> float:
-    if not samples:
-        return 0.0
-    return math.sqrt(sum(s * s for s in samples) / len(samples))
+        if os.path.isfile(wav_path):
+            os.remove(wav_path)
 
 
 class PlaybackWindowTests(unittest.TestCase):
@@ -98,19 +109,19 @@ class WritePreviewClipTests(unittest.TestCase):
 
             loud = str(Path(tmp) / "start1_dur1.mp3")
             write_preview_clip(src, loud, start=1.0, duration=1.0)
-            loud_samples, loud_dur = _mono_samples(loud)
+            loud_dur, loud_rms, _ = _probe_clip(loud)
             self.assertAlmostEqual(loud_dur, 1.0, delta=0.15)
-            self.assertGreater(_rms(loud_samples), 0.1)
+            self.assertGreater(loud_rms, 0.1)
 
             quiet = str(Path(tmp) / "start0_dur1.mp3")
             write_preview_clip(src, quiet, start=0.0, duration=1.0)
-            quiet_samples, quiet_dur = _mono_samples(quiet)
+            quiet_dur, quiet_rms, _ = _probe_clip(quiet)
             self.assertAlmostEqual(quiet_dur, 1.0, delta=0.15)
-            self.assertLess(_rms(quiet_samples), _rms(loud_samples) / 4)
+            self.assertLess(quiet_rms, loud_rms / 4)
 
             sixty = str(Path(tmp) / "start12_dur60.mp3")
             write_preview_clip(src, sixty, start=12.0, duration=60.0)
-            _, sixty_dur = _mono_samples(sixty)
+            sixty_dur, _, _ = _probe_clip(sixty)
             # Source is only 3s; clamp rather than invent audio.
             self.assertAlmostEqual(sixty_dur, 3.0, delta=0.2)
 
@@ -120,11 +131,10 @@ class WritePreviewClipTests(unittest.TestCase):
             _write_segmented_wav(src, [(12.0, 0.0), (63.0, 0.4)])
             dest = str(Path(tmp) / "clip.mp3")
             write_preview_clip(src, dest, start=12.0, duration=60.0)
-            samples, dur = _mono_samples(dest)
+            dur, rms, head_rms = _probe_clip(dest)
             self.assertAlmostEqual(dur, 60.0, delta=0.35)
-            self.assertGreater(_rms(samples), 0.08)
-            head = samples[: int(0.4 * 22050)]
-            self.assertGreater(_rms(head), 0.08)
+            self.assertGreater(rms, 0.08)
+            self.assertGreater(head_rms, 0.08)
 
     def test_cache_hit_skips_rewrite(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
