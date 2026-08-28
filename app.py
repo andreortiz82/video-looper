@@ -29,7 +29,9 @@ from song_queue import (
     load_queue,
     newest_take_per_title,
     save_queue,
+    start_or_none,
     status_after_preview,
+    style_letter,
 )
 
 STYLES = ("a", "b", "c")
@@ -79,8 +81,14 @@ def _init_widget(key: str, value) -> None:
         st.session_state[key] = value
 
 
+def _roll_seed(iid: str) -> None:
+    st.session_state[f"seed_{iid}"] = random.randint(1, 2_147_483_647)
+
+
 def _sync_item_from_widgets(item: dict, iid: str) -> None:
-    item["style"] = st.session_state.get(f"style_{iid}", item.get("style") or "a")
+    item["style"] = style_letter(
+        st.session_state.get(f"style_{iid}"), item.get("style") or "a"
+    )
     aspect_label = st.session_state.get(f"aspect_{iid}")
     if aspect_label:
         for key, label in ASPECT_LABELS.items():
@@ -90,27 +98,25 @@ def _sync_item_from_widgets(item: dict, iid: str) -> None:
     item["seed"] = int(st.session_state.get(f"seed_{iid}", item.get("seed") or 0))
     item["title"] = st.session_state.get(f"title_{iid}", item.get("title") or "")
     item["date"] = st.session_state.get(f"date_{iid}", item.get("date") or "")
-    if st.session_state.get(f"set_start_{iid}", item.get("start") is not None):
-        item["start"] = float(st.session_state.get(f"start_{iid}", item.get("start") or 0.0))
+    start = start_or_none(st.session_state.get(f"start_{iid}", item.get("start")))
+    item["start"] = start
+    if start is not None:
         item["clip_seed"] = None
-    else:
-        item["start"] = None
-        if st.session_state.get(f"set_clip_{iid}"):
-            item["clip_seed"] = int(st.session_state.get(f"clip_seed_{iid}") or 0)
-        else:
-            item["clip_seed"] = None
     item["duration"] = float(st.session_state.get(f"duration_{iid}", item.get("duration") or 60))
 
 
 st.set_page_config(page_title="Rasa Nova video queue", layout="wide")
 st.title("Rasa Nova video queue")
-st.caption("Local only. Preview stills do not mark a song done — full MP4 render can, if you confirm.")
+st.caption("Local only. Preview stills do not mark a song done.")
 
 queue = load_queue()
 items = queue["items"]
+preview_clicked = False
+render_clicked = False
+item = None
 
 with st.sidebar:
-    st.header("Drive")
+    st.subheader("Data source")
     if not api_key():
         st.warning("Set `PUBLIC_GOOGLE_API_KEY` in `.env` to scan / download.")
     if st.button("Scan Google Drive", width="stretch"):
@@ -125,7 +131,74 @@ with st.sidebar:
             st.rerun()
         except Exception as exc:
             st.error(str(exc))
-    st.caption("Appends unseen titles. Existing order stays put. Audio downloads on preview/render.")
+
+    if items:
+        st.divider()
+        st.subheader("Song details")
+        selected_idx = st.selectbox(
+            "Choose Song",
+            range(len(items)),
+            format_func=lambda i: items[i].get("title") or "(untitled)",
+            placeholder="Song name",
+            key="selected_song",
+        )
+        item = items[selected_idx]
+        iid = _item_key(item)
+
+        _init_widget(f"style_{iid}", item.get("style") or "a")
+        _init_widget(
+            f"aspect_{iid}",
+            ASPECT_LABELS.get(item.get("aspect") or "portrait", ASPECT_LABELS["portrait"]),
+        )
+        _init_widget(f"seed_{iid}", int(item.get("seed") or 0))
+        _init_widget(f"title_{iid}", item.get("title") or "")
+        _init_widget(f"date_{iid}", item.get("date") or "")
+        _init_widget(f"start_{iid}", float(item.get("start") or 0.0))
+        _init_widget(f"duration_{iid}", float(item.get("duration") or 60))
+
+        st.text_input("Display Name", key=f"title_{iid}")
+        st.text_input("Display Date", key=f"date_{iid}")
+
+        st.divider()
+        st.subheader("Visual settings and preview")
+        st.segmented_control(
+            "Style",
+            list(STYLES),
+            format_func=lambda s: s.upper(),
+            key=f"style_{iid}",
+            width="stretch",
+        )
+        st.selectbox("Aspect Ratio", list(ASPECT_LABELS.values()), key=f"aspect_{iid}")
+
+        seed_col, roll_col = st.columns([3, 1], vertical_alignment="bottom")
+        with seed_col:
+            st.number_input("Art Seed", step=1, key=f"seed_{iid}")
+        with roll_col:
+            st.button("ROLL", width="stretch", on_click=_roll_seed, args=(iid,))
+
+        preview_clicked = st.button("Render Preview Stills", width="stretch")
+
+        st.divider()
+        st.subheader("Timing")
+        st.number_input("Start (seconds)", min_value=0.0, step=0.5, key=f"start_{iid}")
+        st.number_input("Duration (seconds)", min_value=1.0, step=1.0, key=f"duration_{iid}")
+
+        _sync_item_from_widgets(item, iid)
+        try:
+            from layout import normalize_aspect
+
+            item["aspect"] = normalize_aspect(item.get("aspect") or "portrait")
+        except Exception:
+            item["aspect"] = item.get("aspect") or "portrait"
+        save_queue(queue)
+
+        st.divider()
+        st.subheader("Final actions")
+        render_clicked = st.button("Render Video", width="stretch", type="primary")
+        if st.button("Mark Done", width="stretch"):
+            item["status"] = STATUS_DONE
+            save_queue(queue)
+            st.rerun()
 
 if not items:
     st.info("Queue is empty. Scan Google Drive from the sidebar, or add rows to `queue.json`.")
@@ -133,97 +206,17 @@ if not items:
 
 table_rows = [
     {
-        "#": item["position"] + 1,
-        "title": item.get("title") or "",
-        "status": item.get("status") or "",
-        "session": item.get("session") or "",
-        "style": (item.get("style") or "").upper(),
-        "aspect": item.get("aspect") or "",
-        "date": item.get("date") or "",
+        "#": row["position"] + 1,
+        "title": row.get("title") or "",
+        "status": row.get("status") or "",
+        "session": row.get("session") or "",
+        "style": (row.get("style") or "").upper(),
+        "aspect": row.get("aspect") or "",
+        "date": row.get("date") or "",
     }
-    for item in items
+    for row in items
 ]
 st.dataframe(table_rows, hide_index=True, width="stretch")
-
-labels = [f"{it['position'] + 1}. {it.get('title') or '(untitled)'}  ·  {it.get('status')}" for it in items]
-selected_idx = st.selectbox(
-    "Selected song",
-    range(len(items)),
-    format_func=lambda i: labels[i],
-    key="selected_song",
-)
-item = items[selected_idx]
-iid = _item_key(item)
-
-with st.sidebar:
-    st.divider()
-    st.header("Selected")
-    st.caption(item.get("session") or "No session folder")
-
-    _init_widget(f"style_{iid}", item.get("style") or "a")
-    _init_widget(f"aspect_{iid}", ASPECT_LABELS.get(item.get("aspect") or "portrait", ASPECT_LABELS["portrait"]))
-    _init_widget(f"seed_{iid}", int(item.get("seed") or 0))
-    _init_widget(f"title_{iid}", item.get("title") or "")
-    _init_widget(f"date_{iid}", item.get("date") or "")
-    _init_widget(f"set_start_{iid}", item.get("start") is not None)
-    _init_widget(f"start_{iid}", float(item.get("start") or 0.0))
-    _init_widget(f"duration_{iid}", float(item.get("duration") or 60))
-    _init_widget(f"set_clip_{iid}", item.get("clip_seed") is not None)
-    _init_widget(f"clip_seed_{iid}", int(item.get("clip_seed") or 0))
-
-    st.radio("Style", STYLES, key=f"style_{iid}", format_func=lambda s: s.upper(), horizontal=True)
-    st.selectbox("Aspect", list(ASPECT_LABELS.values()), key=f"aspect_{iid}")
-
-    seed_col, roll_col = st.columns([3, 1])
-    with seed_col:
-        st.number_input("Art seed", step=1, key=f"seed_{iid}")
-    with roll_col:
-        st.write("")
-        if st.button("Reroll", help="New --seed for artwork"):
-            st.session_state[f"seed_{iid}"] = random.randint(1, 2_147_483_647)
-            _sync_item_from_widgets(item, iid)
-            save_queue(queue)
-            st.rerun()
-
-    st.text_input("Display name (chrome title)", key=f"title_{iid}")
-    st.text_input("Date (chrome)", key=f"date_{iid}", help="Wired to RenderOptions.song_date / session folder date")
-
-    st.checkbox("Set in-point (--start)", key=f"set_start_{iid}")
-    st.number_input("Start (seconds)", min_value=0.0, step=0.5, key=f"start_{iid}", disabled=not st.session_state.get(f"set_start_{iid}"))
-    st.number_input("Duration (seconds)", min_value=1.0, step=1.0, key=f"duration_{iid}")
-    st.checkbox(
-        "Set clip seed (--clip-seed)",
-        key=f"set_clip_{iid}",
-        disabled=bool(st.session_state.get(f"set_start_{iid}")),
-        help="Random 60s window seed when in-point is unset",
-    )
-    st.number_input(
-        "Clip seed",
-        step=1,
-        key=f"clip_seed_{iid}",
-        disabled=(
-            (not st.session_state.get(f"set_clip_{iid}"))
-            or bool(st.session_state.get(f"set_start_{iid}"))
-        ),
-    )
-
-    _sync_item_from_widgets(item, iid)
-    try:
-        from layout import normalize_aspect
-
-        item["aspect"] = normalize_aspect(item.get("aspect") or "portrait")
-    except Exception:
-        item["aspect"] = item.get("aspect") or "portrait"
-    save_queue(queue)
-
-    st.divider()
-    preview_clicked = st.button("Render preview stills", width="stretch")
-    mark_done_after = st.checkbox("Mark done if MP4 render succeeds", value=False)
-    render_clicked = st.button("Render MP4", width="stretch", type="primary")
-    if item.get("status") != STATUS_DONE and st.button("Mark done", width="stretch"):
-        item["status"] = STATUS_DONE
-        save_queue(queue)
-        st.rerun()
 
 if preview_clicked:
     try:
@@ -269,10 +262,8 @@ if render_clicked:
                     clip_seed=item.get("clip_seed"),
                 ),
             )
-        if mark_done_after:
-            item["status"] = STATUS_DONE
         save_queue(queue)
-        st.success(f"Wrote {out}" + (" — marked done." if mark_done_after else " — not marked done."))
+        st.success(f"Wrote {out}")
         st.session_state["last_mp4"] = out
     except Exception as exc:
         item["status"] = STATUS_FAILED
