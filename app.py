@@ -20,6 +20,12 @@ os.chdir(ROOT)
 
 import streamlit as st
 
+from audio_preview import (
+    playback_duration,
+    playback_start,
+    preview_cache_path,
+    write_preview_clip,
+)
 from drive import api_key, download_file, list_session_tracks
 from song_queue import (
     STATUS_DONE,
@@ -83,6 +89,26 @@ def _init_widget(key: str, value) -> None:
 
 def _roll_seed(iid: str) -> None:
     st.session_state[f"seed_{iid}"] = random.randint(1, 2_147_483_647)
+
+
+def _render_clip_player(item: dict, iid: str) -> None:
+    """Play only Timing start+duration. Start 0 is the file beginning, not a random window."""
+    start = playback_start(st.session_state.get(f"start_{iid}"))
+    duration = playback_duration(st.session_state.get(f"duration_{iid}"))
+    dest = preview_cache_path(
+        drive_id=item.get("driveId") or "",
+        stem=_song_stem(item),
+        start=start,
+        duration=duration,
+    )
+    try:
+        if not (os.path.isfile(dest) and os.path.getsize(dest) > 0):
+            with st.spinner("Downloading audio if needed, then slicing clip…"):
+                song_path = _ensure_audio(item)
+                dest = write_preview_clip(song_path, dest, start, duration)
+        st.audio(dest, format="audio/mp3", key=f"clip_player_{os.path.basename(dest)}")
+    except Exception as exc:
+        st.warning(str(exc))
 
 
 def _sync_item_from_widgets(item: dict, iid: str) -> None:
@@ -182,6 +208,7 @@ with st.sidebar:
         st.subheader("Timing")
         st.number_input("Start (seconds)", min_value=0.0, step=0.5, key=f"start_{iid}")
         st.number_input("Duration (seconds)", min_value=1.0, step=1.0, key=f"duration_{iid}")
+        _render_clip_player(item, iid)
 
         _sync_item_from_widgets(item, iid)
         try:

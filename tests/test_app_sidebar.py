@@ -66,6 +66,20 @@ class SidebarWireframeTests(unittest.TestCase):
         self.assertIn("status_after_preview", preview_handler)
         self.assertNotIn("STATUS_DONE", preview_handler)
 
+    def test_clip_player_lives_in_timing_group(self) -> None:
+        timing = self.src.index('"Timing"')
+        duration = self.src.index('"Duration (seconds)"')
+        call = self.src.index("_render_clip_player(item, iid)")
+        final = self.src.index('"Final actions"')
+        audio = self.src.index("st.audio(")
+        self.assertGreater(duration, timing)
+        self.assertGreater(call, duration)
+        self.assertGreater(final, call)
+        self.assertIn("def _render_clip_player", self.src)
+        self.assertGreater(audio, self.src.index("def _render_clip_player"))
+        self.assertNotIn("howler", self.src.lower())
+        self.assertNotIn("wavesurfer", self.src.lower())
+
 
 if __name__ == "__main__":
     unittest.main()
