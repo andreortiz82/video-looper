@@ -106,7 +106,7 @@ def _render_clip_player(item: dict, iid: str) -> None:
             with st.spinner("Downloading audio if needed, then slicing clip…"):
                 song_path = _ensure_audio(item)
                 dest = write_preview_clip(song_path, dest, start, duration)
-        st.audio(dest, format="audio/mp3", key=f"clip_player_{os.path.basename(dest)}")
+        st.audio(dest, format="audio/mpeg")
     except Exception as exc:
         st.warning(str(exc))
 
